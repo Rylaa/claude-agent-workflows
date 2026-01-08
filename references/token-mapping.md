@@ -243,6 +243,40 @@ Figma px → Tailwind
 Özel: border-[3px]
 ```
 
+### Border Color
+
+```jsx
+// Düz renk
+<div className="border border-[#E5E5E5]">
+
+// Tailwind renkleri
+<div className="border border-gray-200">
+<div className="border border-gray-300">
+<div className="border border-gray-400">
+
+// Opacity ile
+<div className="border border-black/10">
+<div className="border border-white/20">
+
+// Farklı kenarlar için farklı renkler
+<div className="border-t border-t-gray-200 border-b border-b-gray-300">
+
+// Gradient border (pseudo-element gerektirir)
+<div className="relative">
+  <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 -z-10" />
+  <div className="m-[1px] rounded-lg bg-white">Content</div>
+</div>
+```
+
+**Figma'dan dönüşüm:**
+| Figma Stroke Color | Tailwind |
+|-------------------|----------|
+| #E5E5E5 | `border-gray-200` veya `border-[#E5E5E5]` |
+| #D1D5DB | `border-gray-300` |
+| #9CA3AF | `border-gray-400` |
+| rgba(0,0,0,0.1) | `border-black/10` |
+| Gradient | Pseudo-element pattern (yukarıda) |
+
 ### Box Shadow
 
 Figma shadow → Tailwind:
@@ -324,6 +358,220 @@ Figma Gap → Tailwind gap-X
 
 Farklı eksenler:
 gap-x-4 gap-y-2  // Horizontal: 16px, Vertical: 8px
+```
+
+## Konumlandırma (Positioning)
+
+### Position Types
+
+Figma'da constraint ve overlay kullanımına göre position belirlenir:
+
+| Figma Durumu | Tailwind | Kullanım |
+|--------------|----------|----------|
+| Normal layer | `relative` (default) | Referans noktası için |
+| Overlay/Modal | `fixed` | Viewport'a sabitli |
+| Tooltip/Dropdown | `absolute` + parent `relative` | Parent'a göre konumlu |
+| Sticky header | `sticky top-0` | Scroll'da sabit kalır |
+
+### Absolute Positioning Patterns
+
+```jsx
+// Overlay pattern (Modal, Drawer)
+<div className="fixed inset-0 z-50 flex items-center justify-center">
+  <div className="absolute inset-0 bg-black/50" /> {/* Backdrop */}
+  <div className="relative z-10 bg-white rounded-lg p-6">
+    Modal Content
+  </div>
+</div>
+
+// Tooltip pattern
+<div className="relative">
+  <button>Hover me</button>
+  <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2">
+    Tooltip content
+  </div>
+</div>
+
+// Badge on corner
+<div className="relative">
+  <img src="..." className="w-16 h-16 rounded-full" />
+  <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full" />
+</div>
+
+// Floating action button
+<button className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-primary shadow-lg">
+  +
+</button>
+```
+
+### Figma Constraints → CSS Position
+
+| Figma Constraint | CSS/Tailwind |
+|-----------------|--------------|
+| Left | `left-0` |
+| Right | `right-0` |
+| Top | `top-0` |
+| Bottom | `bottom-0` |
+| Left & Right | `left-0 right-0` veya `inset-x-0` |
+| Top & Bottom | `top-0 bottom-0` veya `inset-y-0` |
+| Center | `left-1/2 -translate-x-1/2` |
+| Center Vertical | `top-1/2 -translate-y-1/2` |
+| Scale (Fill) | `inset-0` |
+
+### Z-index Mapping
+
+Figma layer sıralaması → Tailwind z-index:
+
+| Katman Tipi | Tailwind | Değer |
+|-------------|----------|-------|
+| Base content | `z-0` | 0 |
+| Elevated card | `z-10` | 10 |
+| Sticky header | `z-20` | 20 |
+| Dropdown/Popover | `z-30` | 30 |
+| Modal backdrop | `z-40` | 40 |
+| Modal content | `z-50` | 50 |
+| Toast/Notification | `z-[60]` | 60 |
+| Tooltip | `z-[70]` | 70 |
+
+```jsx
+// Stacking context oluşturma
+<div className="relative z-0">
+  {/* Bu container içindeki z-index'ler izole */}
+  <div className="relative z-10">Card 1</div>
+  <div className="relative z-20">Card 2 (üstte)</div>
+</div>
+
+// Negative z-index (arka plan için)
+<div className="relative">
+  <div className="absolute inset-0 -z-10 bg-gradient-to-r from-blue-500 to-purple-500" />
+  <div className="relative">Content (ön planda)</div>
+</div>
+```
+
+### Inset Utilities
+
+Figma'daki "Constraints" paneli → Tailwind inset:
+
+```
+// Tüm kenarlar
+inset-0      → top: 0; right: 0; bottom: 0; left: 0;
+inset-4      → top: 1rem; right: 1rem; bottom: 1rem; left: 1rem;
+inset-[20px] → top: 20px; right: 20px; bottom: 20px; left: 20px;
+
+// Yatay/Dikey
+inset-x-0    → left: 0; right: 0;
+inset-y-0    → top: 0; bottom: 0;
+inset-x-4    → left: 1rem; right: 1rem;
+
+// Tek kenar
+top-0, right-0, bottom-0, left-0
+top-4, right-4, bottom-4, left-4
+top-[20px], right-1/2, bottom-full
+```
+
+## Dekoratif Elementler
+
+### Tanımlama Kriterleri
+
+**✅ Dekoratif sayılan (aria-hidden gerekir):**
+- İçerik taşımayan arka plan görselleri
+- Divider/ayırıcı çizgiler
+- Sadece görsel ikon (yanında metin var)
+- Pattern/texture overlay
+- Gradient arka planlar
+- Decorative shapes (blob, circle, etc.)
+
+**❌ Dekoratif OLMAYAN (alt/aria-label gerekir):**
+- Ürün fotoğrafları
+- Aksiyon butonundaki tek ikon
+- Bilgi taşıyan grafikler
+- Logo ve marka görselleri
+- Avatar/profil resimleri
+
+### Kod Patterns
+
+```jsx
+// Dekoratif görsel
+<img src="decoration.png" alt="" aria-hidden="true" className="pointer-events-none" />
+
+// Dekoratif ikon (yanında label var)
+<button className="flex items-center gap-2">
+  <SearchIcon aria-hidden="true" className="w-4 h-4" />
+  <span>Ara</span>
+</button>
+
+// Sadece ikon buton (aria-label zorunlu)
+<button aria-label="Ara">
+  <SearchIcon className="w-5 h-5" />
+</button>
+
+// Divider / Ayırıcı
+<hr className="border-t border-gray-200" />
+// veya semantik olmayan
+<div role="separator" aria-hidden="true" className="h-px bg-gray-200" />
+
+// Vertical divider
+<div role="separator" aria-hidden="true" className="w-px h-6 bg-gray-200" />
+
+// Background decoration
+<div className="absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
+  <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 blur-3xl" />
+</div>
+
+// Pattern overlay
+<div className="absolute inset-0 -z-10" aria-hidden="true">
+  <div className="absolute inset-0 bg-[url('/pattern.svg')] opacity-5" />
+</div>
+
+// Gradient mesh background
+<div className="absolute inset-0 -z-10" aria-hidden="true">
+  <div className="absolute top-0 left-1/4 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-70" />
+  <div className="absolute top-0 right-1/4 w-72 h-72 bg-yellow-300 rounded-full mix-blend-multiply filter blur-xl opacity-70" />
+  <div className="absolute bottom-20 left-1/3 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-70" />
+</div>
+```
+
+### Decorative vs Meaningful Decision Tree
+
+```
+Element görsel mi?
+├── Evet
+│   ├── İçerik/bilgi taşıyor mu?
+│   │   ├── Evet → alt="Açıklayıcı metin"
+│   │   └── Hayır → alt="" aria-hidden="true"
+│   └── Sadece estetik amaçlı mı?
+│       └── Evet → alt="" aria-hidden="true"
+└── Hayır (ikon, shape, etc.)
+    ├── Tek başına aksiyon mu?
+    │   └── Evet → aria-label="Aksiyon adı"
+    ├── Yanında label var mı?
+    │   └── Evet → aria-hidden="true"
+    └── Sadece dekoratif mi?
+        └── Evet → aria-hidden="true"
+```
+
+### Pseudo-element Decorations
+
+CSS ::before/::after kullanımı (Tailwind'de):
+
+```jsx
+// Underline decoration
+<span className="relative">
+  Link Text
+  <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary" aria-hidden="true" />
+</span>
+
+// Quote decoration
+<blockquote className="relative pl-6">
+  <span className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-full" aria-hidden="true" />
+  Quote text here
+</blockquote>
+
+// Card corner decoration
+<div className="relative overflow-hidden rounded-lg">
+  <div className="absolute -top-10 -right-10 w-20 h-20 bg-primary/10 rounded-full" aria-hidden="true" />
+  Card content
+</div>
 ```
 
 ## Tam Örnek: Card Component
