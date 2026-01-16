@@ -1,0 +1,12 @@
+{
+  "name": "pixelbyte-agent-workflows",
+  "version": "1.0.0",
+  "description": "Pixelbyte workflow agents for code review and compliance checking",
+  "author": {
+    "name": "Pixelbyte",
+    "url": "https://github.com/Rylaa"
+  },
+  "repository": "https://github.com/Rylaa/pixelbyte-agent-workflows",
+  "license": "MIT",
+  "keywords": ["code-review", "compliance", "prompt-validation", "implementation-checker"]
+}
