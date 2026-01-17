@@ -12,7 +12,7 @@
       "name": "pixelbyte-agent-workflows",
       "description": "Figma-to-code conversion, frontend dev guidelines, and prompt compliance checking",
       "version": "1.0.0",
-      "source": "."
+      "source": ".."
     }
   ]
 }
