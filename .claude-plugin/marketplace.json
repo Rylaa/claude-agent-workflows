@@ -29,14 +29,14 @@
       "category": "development"
     },
     {
-      "name": "pb-code-review",
-      "description": "Prompt compliance checker agent for validating implementations against requirements. Detects regressions and ensures code matches the original prompt.",
+      "name": "pb-agents",
+      "description": "Pixelbyte agent collection: prompt compliance checker, component documentation generator, and more specialized agents for development workflows.",
       "version": "1.0.0",
       "author": {
         "name": "Pixelbyte",
         "url": "https://github.com/Rylaa"
       },
-      "source": "./plugins/pb-code-review",
+      "source": "./plugins/pb-agents",
       "category": "quality"
     }
   ]
