@@ -1,0 +1,12 @@
+{
+  "name": "pb-agents",
+  "version": "1.0.0",
+  "description": "Pixelbyte agent collection: prompt compliance checker, component documentation generator, and more specialized agents for development workflows.",
+  "author": {
+    "name": "Pixelbyte",
+    "url": "https://github.com/Rylaa"
+  },
+  "repository": "https://github.com/Rylaa/pixelbyte-agent-workflows",
+  "license": "MIT",
+  "keywords": ["agents", "code-review", "documentation", "compliance", "component-analysis", "react", "typescript"]
+}
