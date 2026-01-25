@@ -30,3 +30,31 @@ All outputs saved to `docs/figma-reports/`:
 - `{file_key}-validation.md` - Design validation results
 - `{file_key}-spec.md` - Implementation specification
 - `{file_key}-final.md` - Compliance check results
+
+## Background Agents
+
+### font-manager
+
+Runs in background after Design Validator completes. Does not block the main pipeline.
+
+**Trigger:** Design Validator status is PASS or WARN
+
+**Function:**
+- Detects fonts from Figma typography tokens
+- Downloads from Google Fonts, Font Squirrel
+- Sets up fonts for detected platform (React, SwiftUI, Kotlin, Vue)
+- Updates spec with "Fonts Setup" section
+
+**Usage:**
+```
+Pipeline runs automatically:
+Design Validator ──┬──► Design Analyst ──► ...
+                   │
+                   └──► Font Manager (background)
+```
+
+Manual trigger:
+```
+@font-manager setup docs/figma-reports/{file_key}-validation.md
+```
+
