@@ -115,3 +115,51 @@ fonts_required:
     styles: [normal, italic]
     source: null
 ```
+
+## Platform Detection
+
+Detect the target platform by checking project files:
+
+### Detection Rules
+
+| Check | Platform | Setup Method |
+|-------|----------|--------------|
+| `package.json` has "next" | Next.js | `next/font` or `public/fonts` |
+| `package.json` has "react" (no next) | React | `public/fonts` + CSS |
+| `package.json` has "vue" | Vue | `public/fonts` + CSS |
+| `Podfile` or `*.xcodeproj` exists | SwiftUI/iOS | Bundle + Info.plist |
+| `build.gradle` or `build.gradle.kts` | Kotlin/Android | `res/font` + XML |
+
+### Detection Commands
+
+```bash
+# Check for Next.js
+Grep("\"next\"", "package.json")
+
+# Check for React (vanilla)
+Grep("\"react\"", "package.json") && ! Grep("\"next\"", "package.json")
+
+# Check for Vue
+Grep("\"vue\"", "package.json")
+
+# Check for iOS/SwiftUI
+Glob("**/*.xcodeproj") || Glob("**/Podfile")
+
+# Check for Android/Kotlin
+Glob("**/build.gradle") || Glob("**/build.gradle.kts")
+```
+
+### Platform Priority
+
+If multiple platforms detected (monorepo), ask user:
+
+```
+AskUserQuestion:
+  question: "Multiple platforms detected. Which one should I set up fonts for?"
+  options:
+    - "Next.js/React"
+    - "SwiftUI/iOS"
+    - "Kotlin/Android"
+    - "Vue"
+    - "All platforms"
+```
