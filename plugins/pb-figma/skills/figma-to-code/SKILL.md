@@ -1,11 +1,11 @@
 ---
 name: figma-to-code
-description: This skill handles pixel-perfect Figma design conversion to React/Next.js/Tailwind code using Pixelbyte Figma MCP Server. It should be used when a Figma URL or design selection needs to be converted to production-ready code. The skill employs a 5-phase workflow targeting 85%+ accuracy with Code Connect support for component mapping. Use cases include (1) generating code from Figma files, (2) design implementation with design tokens, (3) creating design system components with Code Connect, (4) pixel-perfect UI development, and (5) responsive web components. Automatic QA is performed via Claude in Chrome MCP for visual validation.
+description: This skill handles pixel-perfect Figma design conversion to production code (React/Tailwind, SwiftUI, Vue, Kotlin) using Pixelbyte Figma MCP Server. It should be used when a Figma URL or design selection needs to be converted to production-ready code. The skill employs a 5-phase workflow with framework detection and routing to framework-specific agents. Use cases include (1) generating code from Figma files for any supported framework, (2) design implementation with design tokens, (3) creating design system components, (4) pixel-perfect UI development across platforms, and (5) responsive web/native components. Automatic QA is performed via Claude in Chrome MCP for visual validation.
 ---
 
 # Figma-to-Code Pixel-Perfect Conversion
 
-This skill converts Figma designs to pixel-perfect React/Tailwind code using **Pixelbyte Figma MCP Server** with a **5-phase workflow** and **iterative validation**.
+This skill converts Figma designs to pixel-perfect production code using **Pixelbyte Figma MCP Server** with a **5-phase workflow**, **framework detection**, and **iterative validation**.
 
 ## Prerequisites
 
@@ -73,11 +73,17 @@ Figma URL
 └─────────────────────────┘
     │
     ▼
-┌─────────────────────────┐
-│ 4. code-generator       │ → Component Files
-└─────────────────────────┘
+┌─────────────────────────────────────────────┐
+│ 4. Framework Detection & Routing            │
+├─────────────────────────────────────────────┤
+│ → React/Next.js  → code-generator-react     │
+│ → SwiftUI        → code-generator-swiftui   │
+│ → Vue/Nuxt       → code-generator-vue       │
+│ → Kotlin/Compose → code-generator-kotlin    │
+└─────────────────────────────────────────────┘
     │
-    ▼
+    ▼ Component Files
+    │
 ┌─────────────────────────┐
 │ 5. compliance-checker   │ → Final Report
 └─────────────────────────┘
@@ -91,7 +97,13 @@ When a Figma URL is provided, invoke agents sequentially:
 2. **Agent 1:** Dispatch `design-validator` with URL
 3. **Agent 2:** Dispatch `design-analyst` with validation report path
 4. **Agent 3:** Dispatch `asset-manager` with spec path
-5. **Agent 4:** Dispatch `code-generator` with updated spec path
+5. **Agent 4:** **Detect framework and route to appropriate code generator:**
+   - Detect project framework (React/SwiftUI/Vue/Kotlin)
+   - Route to framework-specific agent:
+     - `code-generator-react` for React/Next.js
+     - `code-generator-swiftui` for SwiftUI (iOS/macOS)
+     - `code-generator-vue` for Vue/Nuxt
+     - `code-generator-kotlin` for Kotlin/Jetpack Compose
 6. **Agent 5:** Dispatch `compliance-checker` with spec and code paths
 7. **Complete:** Present Final Report to user
 
@@ -106,11 +118,73 @@ docs/figma-reports/
 └── {file_key}-final.md        # Agent 5 output
 ```
 
+### Framework Detection (Before Code Generation)
+
+Before dispatching the code generator (Agent 4), detect the project framework:
+
+#### Detection Order
+
+1. **Check for Swift/Xcode:**
+   ```bash
+   ls -d *.xcodeproj 2>/dev/null || ls -d *.xcworkspace 2>/dev/null || ls Package.swift 2>/dev/null
+   ```
+   If found → Route to `code-generator-swiftui`
+
+2. **Check for Android/Kotlin:**
+   ```bash
+   find . -name "build.gradle.kts" -exec grep -l "androidx.compose" {} \; 2>/dev/null
+   ```
+   If found → Route to `code-generator-kotlin`
+
+3. **Check for Node.js framework:**
+   ```bash
+   cat package.json 2>/dev/null | grep -E '"(react|next|vue|nuxt)"'
+   ```
+   - If "react" or "next" → Route to `code-generator-react`
+   - If "vue" or "nuxt" → Route to `code-generator-vue`
+
+4. **No framework detected:**
+   - Default to `code-generator-react` (most common)
+   - Warn user that React/Next.js was auto-selected
+
+#### Framework Routing
+
+Dispatch the appropriate agent using the Task tool:
+
+```markdown
+Task(
+  subagent_type="pb-figma:code-generator-{framework}",
+  prompt="Generate code from spec: docs/figma-reports/{file_key}-spec.md
+
+Component list:
+- ComponentName1 (node_id: 123:456)
+- ComponentName2 (node_id: 789:012)
+
+Output directory: {project-specific-path}"
+)
+```
+
+Where `{framework}` is one of: `react`, `swiftui`, `vue`, or `kotlin`
+
+**Example dispatch for React:**
+```markdown
+Task(
+  subagent_type="pb-figma:code-generator-react",
+  prompt="Generate code from spec: docs/figma-reports/ABC123-spec.md
+
+Component list:
+- HeroCard (node_id: 456:789)
+- PricingTable (node_id: 012:345)
+
+Output directory: src/components"
+)
+```
+
 ### Manual Override
 
 Users can run individual agents:
 - "Just validate this design" → Run only design-validator
-- "Generate code from this spec" → Run only code-generator
+- "Generate code from this spec" → Run only code-generator-{framework}
 - "Check compliance" → Run only compliance-checker
 
 ## Source Design Requirements
