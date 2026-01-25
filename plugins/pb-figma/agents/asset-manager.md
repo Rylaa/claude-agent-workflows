@@ -285,7 +285,7 @@ Asset directory: `public/assets/`
 
 ## Error Handling
 
-**Reference:** `references/error-recovery.md`
+**Reference:** `skills/figma-to-code/references/error-recovery.md`
 
 ### Download Recovery
 
