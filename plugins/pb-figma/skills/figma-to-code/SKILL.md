@@ -818,6 +818,9 @@ const fontFamily = "font-sans"; // Fallback
 - **Preview route setup**: `references/preview-setup.md`
 - **Test generation guide**: `references/test-generation.md`
 - **Code Connect guide**: `references/code-connect-guide.md`
+- **Responsive validation**: `references/responsive-validation.md`
+- **Accessibility validation**: `references/accessibility-validation.md`
+- **Error recovery patterns**: `references/error-recovery.md`
 
 ### Prompt Templates
 Phase-specific prompts located in `references/prompts/`:
