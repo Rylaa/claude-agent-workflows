@@ -753,28 +753,13 @@ project/
 └── package.json
 ```
 
-### Step 1: Detect Vue Project
-
-Use Glob tool to locate Vue project files:
-
-```
-Glob("**/package.json")
-```
-
-Then verify Vue dependency:
-
-```bash
-# Check for Vue
-grep -E '"vue"' package.json
-```
-
-### Step 2: Create Fonts Directory
+### Step 1: Create Fonts Directory
 
 ```bash
 mkdir -p public/fonts
 ```
 
-### Step 3: Download Font Files
+### Step 2: Download Font Files
 
 Same as React - using Google Fonts API:
 
@@ -790,7 +775,7 @@ cp /tmp/{FontFamily}/static/*.woff2 public/fonts/ 2>/dev/null || \
 cp /tmp/{FontFamily}/*.ttf public/fonts/
 ```
 
-### Step 4: Create CSS File
+### Step 3: Create CSS File
 
 Write to `src/assets/styles/fonts.css`:
 
@@ -828,7 +813,7 @@ Write to `src/assets/styles/fonts.css`:
 }
 ```
 
-### Step 5: Import in Main Entry
+### Step 4: Import in Main Entry
 
 **Option A: Import in `src/main.ts` or `src/main.js`:**
 
