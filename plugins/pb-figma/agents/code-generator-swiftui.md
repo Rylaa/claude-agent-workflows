@@ -107,19 +107,21 @@ ZStack(alignment: .top) {
 
 **CRITICAL:** Reverse zIndex sort for SwiftUI (lowest zIndex first in code)
 
+**Fallback:** If `layerOrder` is missing from spec, render components in the order they appear in spec components list (no reordering needed).
+
 ### Frame Positioning
 
-When spec includes `absoluteY`, use `.position()` or `.offset()`:
+When spec includes `absoluteY`, use `.offset()` for y-axis positioning:
 
 ```swift
 // PageControl at absoluteY: 60
 PageControl()
-    .position(x: UIScreen.main.bounds.width / 2, y: 60)
+    .offset(y: 60)
     .zIndex(900)
 
 // ContinueButton at absoluteY: 800
-Button("Continue") { }
-    .position(x: UIScreen.main.bounds.width / 2, y: 800)
+ContinueButton()
+    .offset(y: 800)
     .zIndex(100)
 ```
 
