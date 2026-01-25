@@ -244,13 +244,18 @@ const nodeDetails = figma_get_node_details({
   node_id: "{node_id}"
 });
 
-// Extract children and sort by Y coordinate (top to bottom)
-const children = nodeDetails.children.sort((a, b) =>
+// Error handling: Check for valid children and absoluteBoundingBox
+const validChildren = nodeDetails.children?.filter(child =>
+  child.absoluteBoundingBox?.y !== undefined
+) || [];
+
+// Sort by Y coordinate (top to bottom)
+const sortedChildren = validChildren.sort((a, b) =>
   a.absoluteBoundingBox.y - b.absoluteBoundingBox.y
 );
 
 // Assign z-index values (higher = on top)
-const layerOrder = children.map((child, index) => ({
+const layerOrder = sortedChildren.map((child, index) => ({
   layer: child.name,
   zIndex: 1000 - (index * 100),  // Top element gets highest zIndex
   position: determinePosition(child.absoluteBoundingBox.y, containerHeight),
@@ -259,15 +264,28 @@ const layerOrder = children.map((child, index) => ({
 }));
 ```
 
+**Error Handling:**
+- Check that nodeDetails.children exists before sorting
+- Filter children to only include those with absoluteBoundingBox property
+- Skip nodes where absoluteBoundingBox is null or undefined
+- This prevents runtime errors for certain Figma node types
+
 **Position Context Determination:**
-```typescript
-function determinePosition(absoluteY, containerHeight) {
-  const relativeY = absoluteY / containerHeight;
-  if (relativeY < 0.33) return 'top';
-  if (relativeY < 0.67) return 'center';
-  return 'bottom';
-}
-```
+
+Calculate position context based on relative Y position:
+
+**Determine position context:**
+Calculate relativeY = absoluteY / containerHeight:
+- If relativeY < 0.33 → base position is 'top'
+- If relativeY < 0.67 → base position is 'center'
+- Otherwise → base position is 'bottom'
+
+**Position context values:**
+- Use descriptive labels that indicate both general position and context
+- Examples: 'top-below-status', 'center-hero', 'bottom-above-cta'
+- Base position (top/center/bottom) calculated from relativeY
+- Add context suffix based on nearby elements or purpose
+- Simple values like 'top', 'center', 'bottom' are also valid for straightforward cases
 
 #### Layer Order Rules
 
