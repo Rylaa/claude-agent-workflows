@@ -1,18 +1,21 @@
-# QA Report Template
+# QA Report Template (Claude Vision)
 
 Bu şablon, Phase 4 Visual Validation sonrasında `.qa/report.md` dosyası için kullanılır.
+
+> **Not:** Bu template Claude Vision yaklaşımını kullanır. RMSE/ImageMagick metodolojisi kullanılmaz.
+> Detaylar için `visual-validation-loop.md` dosyasına bakın.
 
 ---
 
 ## Şablon: .qa/report.md
 
 ```markdown
-# QA Validation Report
+# QA Validation Report (Claude Vision)
 
 **Component:** [ComponentName]
 **Date:** [YYYY-MM-DD HH:MM:SS]
-**Final RMSE:** [X.XX%]
-**Iterations:** [N]
+**Validation Method:** Claude Vision
+**Iterations:** [N/3]
 **Status:** ✅ PASS / ⚠️ ACCEPTABLE / ❌ MANUAL REVIEW
 
 ---
@@ -21,134 +24,194 @@ Bu şablon, Phase 4 Visual Validation sonrasında `.qa/report.md` dosyası için
 
 | Metric | Value |
 |--------|-------|
-| Initial RMSE | X.XX% |
-| Final RMSE | X.XX% |
-| Improvement | X.XX% (Initial - Final) |
-| Iterations | N |
-| ImageMagick Version | X.X.X |
-| Playwright MCP | ✅ Available |
+| Validation Method | Claude Vision |
+| Iterations Used | N/3 |
+| Final Status | [PASS / ACCEPTABLE / MANUAL REVIEW] |
+| Categories Checked | Typography, Spacing, Colors, Layout, Assets |
 
 ---
 
-## Tolerance Check
+## Screenshots
 
-| RMSE Range | Status | Result |
-|------------|--------|--------|
-| < 1% | PASS | [✅/❌] |
-| 1% - 2% | ACCEPTABLE | [✅/❌] |
-| > 2% | FAIL | [✅/❌] |
+| Type | Location | Notes |
+|------|----------|-------|
+| Figma Reference | `.qa/reference.png` | Figma MCP screenshot |
+| Iteration 1 | `.qa/iteration-1.png` | Initial implementation |
+| Iteration 2 | `.qa/iteration-2.png` | After first fixes |
+| Iteration 3 | `.qa/iteration-3.png` | After second fixes (if needed) |
+| Final | `.qa/implementation.png` | Final browser screenshot |
 
-**Final Decision:** [PASS / ACCEPTABLE / MANUAL REVIEW]
+---
+
+## Tolerance Criteria
+
+| Category | Tolerance | Notes |
+|----------|-----------|-------|
+| Typography | ±2px font-size, exact weight/family | font-rendering farklılıkları kabul edilir |
+| Spacing | ±4px padding/margin/gap | Subpixel farklılıklar kabul edilir |
+| Colors | Exact match | Hex değerleri birebir eşleşmeli |
+| Layout | Exact match | Flex direction, alignment, justify |
+| Assets | Exact match | Icon size, color, border-radius |
 
 ---
 
 ## Iteration History
 
-| # | RMSE | Status | Changes Made |
-|---|------|--------|--------------|
-| 1 | X.XX% | ❌ FAIL | Initial implementation |
-| 2 | X.XX% | ❌ FAIL | [List of Tailwind class changes] |
-| 3 | X.XX% | ✅ PASS | [List of final fixes] |
-
-### Iteration 1 Details
-- **Screenshot:** `.qa/iteration-1.png`
-- **RMSE:** X.XX%
-- **Issues Found:**
-  - [Issue 1]
-  - [Issue 2]
-
-### Iteration 2 Details
-- **Screenshot:** `.qa/iteration-2.png`
-- **RMSE:** X.XX%
-- **Fixes Applied:**
-  - `pt-6` → `pt-8`
-  - `font-medium` → `font-semibold`
-
-### Iteration 3 Details
-- **Screenshot:** `.qa/iteration-3.png`
-- **RMSE:** X.XX%
-- **Fixes Applied:**
-  - `gap-4` → `gap-6`
+| # | Status | Differences Found | Fixes Applied |
+|---|--------|-------------------|---------------|
+| 1 | ❌ FAIL | [N differences] | Initial implementation |
+| 2 | ⚠️ PARTIAL | [N differences] | [List of Tailwind fixes] |
+| 3 | ✅ PASS | 0 differences | [List of final fixes] |
 
 ---
 
-## Files Generated
+## Iteration 1 Analysis
 
-| File | Description | Size |
-|------|-------------|------|
-| `.qa/reference.png` | Figma design reference | XXX KB |
-| `.qa/implementation.png` | Final browser screenshot | XXX KB |
-| `.qa/diff.png` | ImageMagick difference visualization | XXX KB |
-| `.qa/iteration-1.png` | First implementation attempt | XXX KB |
-| `.qa/iteration-2.png` | Second attempt (after fixes) | XXX KB |
-| `.qa/iteration-3.png` | Third attempt (if needed) | XXX KB |
-| `.qa/report.md` | This report | X KB |
+**Screenshot:** `.qa/iteration-1.png`
 
----
+### Claude Vision Comparison
 
-## ImageMagick Commands Used
+| Category | Element | Figma | Implementation | Tailwind Fix |
+|----------|---------|-------|----------------|--------------|
+| Typography | Title | 32px bold | 28px medium | `text-3xl font-bold` |
+| Typography | Description | 16px gray-500 | 14px gray-400 | `text-base text-gray-500` |
+| Spacing | Card padding | 24px | 16px | `p-6` |
+| Colors | Button bg | #FE4601 | #3B82F6 | `bg-orange-1` |
 
-```bash
-# RMSE Calculation
-compare -metric RMSE .qa/reference.png .qa/implementation.png null: 2>&1
-# Output: X.XXXX (X.XXXX)
+### TodoWrite Items Created
 
-# Diff Image Generation
-compare -fuzz 3% -metric AE .qa/reference.png .qa/implementation.png .qa/diff.png 2>&1
-# Output: XXXX pixels different
+```
+□ Title font-size: text-2xl → text-3xl
+□ Title font-weight: font-medium → font-bold
+□ Description text: text-sm → text-base
+□ Card padding: p-4 → p-6
+□ Button bg: bg-blue-500 → bg-orange-1
 ```
 
 ---
 
-## Claude Vision Analysis
+## Iteration 2 Analysis
 
-### Iteration 1 Analysis
-```json
-{
-  "differences": [
-    { "area": "header padding", "current": "pt-6", "fix": "pt-8" },
-    { "area": "font weight", "current": "font-medium", "fix": "font-semibold" }
-  ],
-  "rmse_before": "X.X%",
-  "critical_areas": ["padding", "font-weight"]
-}
+**Screenshot:** `.qa/iteration-2.png`
+
+### Claude Vision Comparison
+
+| Category | Element | Figma | Implementation | Tailwind Fix |
+|----------|---------|-------|----------------|--------------|
+| Spacing | Button gap | 12px | 8px | `gap-3` |
+
+### TodoWrite Items Created
+
+```
+□ Button gap: gap-2 → gap-3
 ```
 
-### Iteration 2 Analysis
-```json
-{
-  "differences": [
-    { "area": "gap", "current": "gap-4", "fix": "gap-6" }
-  ],
-  "rmse_before": "X.X%",
-  "critical_areas": ["spacing"]
-}
+---
+
+## Iteration 3 Analysis (if needed)
+
+**Screenshot:** `.qa/iteration-3.png`
+
+### Claude Vision Comparison
+
+| Category | Element | Figma | Implementation | Status |
+|----------|---------|-------|----------------|--------|
+| Typography | All elements | ✅ Match | ✅ Match | PASS |
+| Spacing | All elements | ✅ Match | ✅ Match | PASS |
+| Colors | All elements | ✅ Match | ✅ Match | PASS |
+| Layout | All elements | ✅ Match | ✅ Match | PASS |
+| Assets | All elements | ✅ Match | ✅ Match | PASS |
+
+**Result:** ✅ All categories pass - No differences detected
+
+---
+
+## Check Categories Summary
+
+| Category | Status | Notes |
+|----------|--------|-------|
+| Typography | ✅ | Font size, weight, color match |
+| Spacing | ✅ | Padding, margin, gap match |
+| Colors | ✅ | Background, border, text colors match |
+| Layout | ✅ | Flex direction, alignment match |
+| Assets | ✅ | Icon size, color, border-radius match |
+
+---
+
+## MCP Tools Used
+
+### Figma Screenshot
+
+```javascript
+mcp__pixelbyte-figma-mcp__figma_get_screenshot({
+  params: {
+    file_key: "[FIGMA_FILE_KEY]",
+    node_ids: ["[NODE_ID]"],
+    format: "png",
+    scale: 2
+  }
+})
+```
+
+### Browser Screenshot
+
+```javascript
+// 1. Get tab context
+mcp__claude-in-chrome__tabs_context_mcp({
+  createIfEmpty: true
+})
+
+// 2. Navigate to dev server
+mcp__claude-in-chrome__navigate({
+  url: "http://localhost:3000/[component-path]",
+  tabId: <tab-id>
+})
+
+// 3. Wait for load
+mcp__claude-in-chrome__computer({
+  action: "wait",
+  duration: 2,
+  tabId: <tab-id>
+})
+
+// 4. Take screenshot
+mcp__claude-in-chrome__computer({
+  action: "screenshot",
+  tabId: <tab-id>
+})
 ```
 
 ---
 
 ## Stuck Detection (If Applicable)
 
-> ⚠️ Only include this section if stuck detection was triggered
+> ⚠️ Only include this section if 3 iterations completed without PASS
 
 ### Stuck Report
 
 **Triggered After:** Iteration 3
-**Final RMSE:** X.XX% (still > 2%)
-**RMSE History:** [3.1%, 2.9%, 2.8%]
+**Final Status:** ⚠️ ACCEPTABLE (minor differences remain)
+**Remaining Differences:** [N]
 
-### Possible Causes Identified
+### Remaining Issues
 
-- [ ] **Font Mismatch:** 'Inter' font not installed locally
-- [ ] **Missing Assets:** Icons not exported from Figma
+| Category | Element | Issue | Reason |
+|----------|---------|-------|--------|
+| Typography | Body text | Slight font rendering difference | OS-level antialiasing |
+| Spacing | Card margin | 1px difference | Subpixel rendering |
+
+### Possible Causes
+
+- [ ] **Font Mismatch:** Custom font not installed locally
+- [ ] **Subpixel Rendering:** OS-level antialiasing differences
 - [ ] **Viewport Size:** Browser viewport ≠ Figma frame size
-- [ ] **Subpixel Rendering:** Anti-aliasing differences
+- [ ] **Missing Assets:** Icons not exported from Figma
 
 ### Recommended Actions
 
-1. Check if 'Inter' font is installed: `fc-list | grep Inter`
+1. Check if custom fonts are installed: `fc-list | grep [FontName]`
 2. Verify all icon assets are exported from Figma
-3. Resize browser viewport to match Figma frame: `XXXXxYYYY`
+3. Resize browser viewport to match Figma frame
 4. Consider adding `-webkit-font-smoothing: antialiased`
 
 ---
@@ -163,9 +226,10 @@ compare -fuzz 3% -metric AE .qa/reference.png .qa/implementation.png .qa/diff.pn
 
 Before proceeding to Phase 5:
 
-- [ ] Final RMSE is documented
 - [ ] All iteration screenshots are saved
-- [ ] Diff image is generated
+- [ ] Check categories completed (Typography, Spacing, Colors, Layout, Assets)
+- [ ] TodoWrite items all completed
+- [ ] Final Claude Vision comparison shows no differences (or acceptable)
 - [ ] Code changes are committed (if applicable)
 - [ ] Any stuck detection notes are included
 - [ ] Report is complete
@@ -173,7 +237,8 @@ Before proceeding to Phase 5:
 ---
 
 *Generated by Figma-to-Code Skill - Phase 4 Visual Validation*
-*Report Template Version: 1.0*
+*Validation Method: Claude Vision*
+*Report Template Version: 2.0*
 ```
 
 ---
@@ -181,12 +246,12 @@ Before proceeding to Phase 5:
 ## Örnek Doldurulmuş Rapor
 
 ```markdown
-# QA Validation Report
+# QA Validation Report (Claude Vision)
 
 **Component:** HeroCard
 **Date:** 2025-01-08 14:32:15
-**Final RMSE:** 0.8%
-**Iterations:** 3
+**Validation Method:** Claude Vision
+**Iterations:** 2/3
 **Status:** ✅ PASS
 
 ---
@@ -195,48 +260,87 @@ Before proceeding to Phase 5:
 
 | Metric | Value |
 |--------|-------|
-| Initial RMSE | 5.2% |
-| Final RMSE | 0.8% |
-| Improvement | 4.4% |
-| Iterations | 3 |
-| ImageMagick Version | 7.1.1 |
-| Playwright MCP | ✅ Available |
+| Validation Method | Claude Vision |
+| Iterations Used | 2/3 |
+| Final Status | PASS |
+| Categories Checked | Typography, Spacing, Colors, Layout, Assets |
 
 ---
 
-## Tolerance Check
+## Screenshots
 
-| RMSE Range | Status | Result |
-|------------|--------|--------|
-| < 1% | PASS | ✅ |
-| 1% - 2% | ACCEPTABLE | - |
-| > 2% | FAIL | - |
-
-**Final Decision:** PASS
+| Type | Location | Notes |
+|------|----------|-------|
+| Figma Reference | `.qa/reference.png` | Figma MCP screenshot |
+| Iteration 1 | `.qa/iteration-1.png` | Initial implementation |
+| Iteration 2 | `.qa/iteration-2.png` | After first fixes |
+| Final | `.qa/implementation.png` | Final browser screenshot |
 
 ---
 
 ## Iteration History
 
-| # | RMSE | Status | Changes Made |
-|---|------|--------|--------------|
-| 1 | 5.2% | ❌ FAIL | Initial implementation |
-| 2 | 2.1% | ❌ FAIL | pt-6→pt-8, font-medium→font-semibold |
-| 3 | 0.8% | ✅ PASS | gap-4→gap-6, text-gray-600→text-gray-700 |
+| # | Status | Differences Found | Fixes Applied |
+|---|--------|-------------------|---------------|
+| 1 | ❌ FAIL | 5 differences | Initial implementation |
+| 2 | ✅ PASS | 0 differences | pt-6→pt-8, font-medium→font-semibold, gap-4→gap-6 |
 
 ---
 
-## Files Generated
+## Iteration 1 Analysis
 
-| File | Description | Size |
-|------|-------------|------|
-| `.qa/reference.png` | Figma design reference | 245 KB |
-| `.qa/implementation.png` | Final browser screenshot | 238 KB |
-| `.qa/diff.png` | ImageMagick difference visualization | 12 KB |
-| `.qa/iteration-1.png` | First implementation attempt | 232 KB |
-| `.qa/iteration-2.png` | Second attempt | 235 KB |
-| `.qa/iteration-3.png` | Third attempt | 238 KB |
-| `.qa/report.md` | This report | 4 KB |
+**Screenshot:** `.qa/iteration-1.png`
+
+### Claude Vision Comparison
+
+| Category | Element | Figma | Implementation | Tailwind Fix |
+|----------|---------|-------|----------------|--------------|
+| Typography | Title | 32px semibold | 24px medium | `text-3xl font-semibold` |
+| Spacing | Header padding | 32px top | 24px top | `pt-8` |
+| Spacing | Content gap | 24px | 16px | `gap-6` |
+| Colors | CTA button | #FE4601 | #3B82F6 | `bg-orange-1` |
+| Assets | Icon size | 24px | 20px | `w-6 h-6` |
+
+### TodoWrite Items Created
+
+```
+✅ Title font-size: text-2xl → text-3xl
+✅ Title font-weight: font-medium → font-semibold
+✅ Header padding: pt-6 → pt-8
+✅ Content gap: gap-4 → gap-6
+✅ Button bg: bg-blue-500 → bg-orange-1
+✅ Icon size: w-5 h-5 → w-6 h-6
+```
+
+---
+
+## Iteration 2 Analysis
+
+**Screenshot:** `.qa/iteration-2.png`
+
+### Claude Vision Comparison
+
+| Category | Element | Figma | Implementation | Status |
+|----------|---------|-------|----------------|--------|
+| Typography | All elements | ✅ Match | ✅ Match | PASS |
+| Spacing | All elements | ✅ Match | ✅ Match | PASS |
+| Colors | All elements | ✅ Match | ✅ Match | PASS |
+| Layout | All elements | ✅ Match | ✅ Match | PASS |
+| Assets | All elements | ✅ Match | ✅ Match | PASS |
+
+**Result:** ✅ All categories pass - No differences detected
+
+---
+
+## Check Categories Summary
+
+| Category | Status | Notes |
+|----------|--------|-------|
+| Typography | ✅ | Font size, weight, color match |
+| Spacing | ✅ | Padding, margin, gap match |
+| Colors | ✅ | Background, border, text colors match |
+| Layout | ✅ | Flex direction, alignment match |
+| Assets | ✅ | Icon size, color, border-radius match |
 
 ---
 
@@ -248,7 +352,19 @@ Before proceeding to Phase 5:
 
 ---
 
+## Handoff Checklist
+
+- [x] All iteration screenshots are saved
+- [x] Check categories completed (Typography, Spacing, Colors, Layout, Assets)
+- [x] TodoWrite items all completed
+- [x] Final Claude Vision comparison shows no differences
+- [x] Code changes are committed
+- [x] Report is complete
+
+---
+
 *Generated by Figma-to-Code Skill - Phase 4 Visual Validation*
+*Validation Method: Claude Vision*
 ```
 
 ---
@@ -259,5 +375,8 @@ Phase 4 tamamlandığında bu şablonu kullanarak `.qa/report.md` dosyasını ol
 
 1. Şablonu kopyala
 2. `[placeholder]` değerlerini gerçek değerlerle değiştir
-3. Kullanılmayan bölümleri kaldır (örn: stuck detection yoksa o bölümü sil)
-4. `.qa/report.md` olarak kaydet
+3. Her iteration için Claude Vision karşılaştırma tablosunu doldur
+4. TodoWrite item'larını listele
+5. Check categories summary'yi güncelle
+6. Kullanılmayan bölümleri kaldır (örn: stuck detection yoksa o bölümü sil)
+7. `.qa/report.md` olarak kaydet
