@@ -1011,3 +1011,71 @@ Text(
 
 - [ ] {any manual steps the user needs to complete}
 ```
+
+---
+
+## Error Handling
+
+### Retry Logic
+
+```
+MAX_RETRIES = 3
+Retry on: timeout, network_error, rate_limit
+Backoff: 2s, 4s, 8s
+```
+
+### Error Matrix
+
+| Error | Recovery | Action |
+|-------|----------|--------|
+| Font not found | Suggest fallback | AskUserQuestion with alternatives |
+| Download failed | Retry 3x | If fails, skip and document |
+| Invalid font file | Re-download | If fails, suggest alternative |
+| Platform not detected | Ask user | AskUserQuestion for platform |
+| Spec not found | Stop | Report error, wait for pipeline |
+| Permission denied | Document | Note in output, provide manual steps |
+
+### Fallback Decision Flow
+
+```
+Font "{name}" not found in any source:
+  1. Check fallback mapping table
+  2. If fallback exists:
+     - AskUserQuestion: "Use {fallback} instead of {original}?"
+     - If yes: Download and use fallback
+     - If no: Skip font, document as missing
+  3. If no fallback:
+     - Document as "Not available"
+     - Suggest system font stack
+```
+
+### Partial Success Handling
+
+Continue processing if:
+- At least 50% of fonts downloaded
+- Primary/heading fonts available
+
+Stop and report if:
+- No fonts could be downloaded
+- All downloads failed
+
+### Rate Limit Handling
+
+Google Fonts API:
+- No official rate limit, but be respectful
+- Add 1s delay between downloads
+
+Font Squirrel:
+- If blocked, wait 30s and retry once
+- Document if still blocked
+
+### Validation Checklist
+
+Before completing, verify:
+
+- [ ] All available fonts downloaded
+- [ ] Font files exist in correct directories
+- [ ] Configuration files created/updated
+- [ ] Spec file updated with "Fonts Setup" section
+- [ ] Warnings documented for missing fonts
+- [ ] Manual steps clearly listed
