@@ -838,3 +838,38 @@ If design tokens are incomplete:
    - Colors: Neutral grays
    - Spacing: 4px base unit
 3. Document inferred values as assumptions
+
+### Large MCP Response Handling
+
+If `figma_get_file_structure` or `figma_get_node_details` returns size error:
+
+**Error patterns:**
+- `result (XXX characters) exceeds maximum allowed tokens`
+- `File content (XXX KB) exceeds maximum allowed size (256KB)`
+
+**Recovery steps:**
+
+1. **Reduce query scope:**
+   ```
+   # Instead of full file
+   figma_get_file_structure(file_key, depth=6)  ❌
+
+   # Query specific node with lower depth
+   figma_get_file_structure(file_key, node_id="{target_node}", depth=2)  ✅
+   ```
+
+2. **Use markdown format:** Set `response_format="markdown"` for smaller output
+
+3. **Query nodes individually:** Instead of deep traversal, get details for each required node separately:
+   ```
+   # Get structure overview first (depth=1)
+   figma_get_file_structure(file_key, depth=1)
+
+   # Then query specific nodes
+   figma_get_node_details(file_key, node_id="3:217")
+   figma_get_node_details(file_key, node_id="3:230")
+   ```
+
+4. **Skip structure query:** If file is too large, proceed with node_ids from Validation Report directly
+
+**IMPORTANT:** Never try to read large MCP result files (>256KB). Use targeted queries instead.
