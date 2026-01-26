@@ -219,6 +219,72 @@ Add to Implementation Spec if detected:
 - Border/stroke opacity < 0.8 → Add warning to Design Warnings section
 - Text opacity < 1.0 → Add warning to Design Warnings section
 
+#### Gradient Detection
+
+Extract gradient fills from text nodes via `figma_get_design_tokens`:
+
+**Query Pattern:**
+```typescript
+const tokens = figma_get_design_tokens({
+  file_key: "{file_key}",
+  node_id: "{node_id}",
+  include_typography: true
+});
+
+// Extract gradients from typography tokens
+tokens.typography.forEach(textToken => {
+  if (textToken.gradient) {
+    // Document gradient in Implementation Spec
+  }
+});
+```
+
+**Gradient Types from Figma:**
+- `LINEAR` - Linear gradient with angle
+- `RADIAL` - Radial gradient from center
+- `ANGULAR` - Conic/angular gradient (rainbow effect)
+- `DIAMOND` - Diamond-shaped gradient
+
+**In Implementation Spec - Add Gradient Section:**
+
+```markdown
+### Text with Gradient
+
+**Component:** HeadingText
+- **Gradient Type:** ANGULAR
+- **Stops:**
+  - 0.1673: #bc82f3 (opacity: 1.0)
+  - 0.2365: #f4b9ea (opacity: 1.0)
+  - 0.3518: #8d98ff (opacity: 1.0)
+  - 0.5815: #aa6eee (opacity: 1.0)
+  - 0.697: #ff6777 (opacity: 1.0)
+  - 0.8095: #ffba71 (opacity: 1.0)
+  - 0.9241: #c686ff (opacity: 1.0)
+
+**SwiftUI Mapping:** `AngularGradient` with 7 color stops
+**Minimum iOS:** iOS 15.0+
+```
+
+**Add to Compliance Section:**
+
+```markdown
+### Platform Requirements
+
+- **Gradient Text:** Requires iOS 15.0+ / macOS 12.0+ for `AngularGradient` on Text
+- **Performance:** Complex gradients (5+ stops) may impact rendering performance
+
+### Design Warnings
+
+- ⚠️ **Gradient text detected:** Angular gradient with 7 color stops requires iOS 15+. Consider simpler gradients (2-3 stops) for better performance.
+```
+
+**Gradient extraction rules:**
+- Text node with `gradient` field → Add "Text with Gradient" section
+- Include ALL gradient stops with position, color, opacity
+- Add platform requirement (iOS 15+) to Compliance section
+- Warn if gradient has 5+ stops (performance impact)
+- Map Figma gradient type to SwiftUI equivalent
+
 ### 4. Asset Requirements
 
 For each asset in the inventory:
