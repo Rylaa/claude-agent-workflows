@@ -1,0 +1,11 @@
+<svg width="50" height="63" viewBox="0 0 50 63" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="49.814" height="63" rx="24.5403" fill="#F2F20D" fill-opacity="0.1"/>
+<rect x="0.721774" y="0.721774" width="48.3704" height="61.5565" rx="23.8185" stroke="white" stroke-opacity="0.1" stroke-width="1.44355"/>
+<path d="M13.1861 38.7316L22.7093 30.0349L29.3023 37.2821L37.3605 30.0349" stroke="#F2F20D" stroke-width="1.6185" stroke-linecap="round"/>
+<circle cx="12.4535" cy="38.8256" r="2.19767" fill="#F2F20D"/>
+<circle cx="22.7093" cy="30.0349" r="2.19767" fill="#F2F20D"/>
+<circle cx="37.3606" cy="30.0349" r="2.19767" fill="#F2F20D"/>
+<circle cx="30.035" cy="37.3605" r="2.19767" fill="#F2F20D"/>
+<path d="M30.0349 21.9767L31.0242 24.6502L33.6977 25.6395L31.0242 26.6288L30.0349 29.3023L29.0456 26.6288L26.3721 25.6395L29.0456 24.6502L30.0349 21.9767Z" fill="#F2F20D"/>
+<path d="M13.9187 27.8372L14.5123 29.4413L16.1164 30.0349L14.5123 30.6285L13.9187 32.2326L13.3251 30.6285L11.721 30.0349L13.3251 29.4413L13.9187 27.8372Z" fill="#F2F20D"/>
+</svg>
