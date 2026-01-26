@@ -382,8 +382,12 @@ Figma's layer panel order != Y coordinate order. Overlay elements can have ANY Y
 - Background: Y=0 (full screen) + Layer Panel BOTTOM → zIndex 100
 - PageControl: Y=60 (top of screen) + Layer Panel TOP → zIndex 300
 
-If sorted by Y: Background gets zIndex 1000 ❌ WRONG
-Using array order: Background (index 0) gets zIndex 100, PageControl (index 2) gets zIndex 300 ✅ CORRECT
+If sorted by Y (incorrectly assuming lower Y = higher visual priority):
+  Background at Y=0 → assigned highest zIndex 1000 ❌ WRONG
+
+Correct approach using layer panel order:
+  Background at layer panel bottom (index 0) → zIndex 100 ✅ CORRECT
+  PageControl at layer panel top (index 2) → zIndex 300 ✅ CORRECT
 
 **Critical:** Always use children array order for accurate layer hierarchy.
 
@@ -407,24 +411,16 @@ Calculate relativeY = absoluteY / containerHeight:
 #### Layer Order Rules
 
 1. **Higher zIndex = renders on top**
-   - Start from 1000 for top layer
-   - Decrement by 100 for each layer below
-   - Leaves room for intermediate layers (e.g., 950 for overlays)
+   - Assign based on children array index: `(index + 1) * 100`
+   - First child (index 0) = zIndex 100 (back layer)
+   - Last child (index n-1) = highest zIndex (front layer)
+   - Leaves room for intermediate layers (e.g., 150, 250)
 
-2. **Use absoluteBoundingBox.y for absoluteY**
-   - Captures exact pixel position from Figma
-   - Enables absolute positioning in code if needed
-   - Useful for fixed-position elements (headers, footers)
+2. **Never sort by Y coordinate** - Figma layer panel order is authoritative
 
-3. **Document parent-child relationships**
-   - List child component names for each container
-   - Maintains component hierarchy
-   - Helps code generators create proper nesting
+3. **Capture absoluteY for context** - Record Y position but don't use for sorting
 
-4. **Note positioning context (top/center/bottom)**
-   - Helps with responsive layout decisions
-   - Guides choice between absolute vs relative positioning
-   - Useful for framework-specific implementations
+4. **Document position context** - Classify as "top", "center", "bottom", "full" based on Y
 
 #### Critical: Query ALL Nodes
 
@@ -499,10 +495,11 @@ layerOrder:
 ```
 
 **Capture rules:**
-1. Higher zIndex = renders on top (StatusBar with zIndex 1000 appears above PageControl with zIndex 900)
-2. Use Figma API `absoluteBoundingBox.y` coordinate for absoluteY
-3. Document parent-child relationships in the children array
-4. Note positioning context (top/center/bottom) to guide layout implementation
+1. zIndex represents visual stacking order (higher = on top): `Background with zIndex 100 (index 0) renders below PageControl with zIndex 300 (index 2)`
+2. **zIndex assigned from children array:** `(index + 1) * 100` - do NOT sort by Y coordinate
+3. absoluteBoundingBox coordinates capture element positions: `{ x: number, y: number, width: number, height: number }`
+4. position context classifies vertical placement: `top/center/bottom/full based on Y coordinate`
+5. children array preserves nested structure: `PageControl > [Dot1, Dot2, Dot3]`
 
 **Critical:** Layer order determines visual stacking. Code generators MUST respect this ordering to achieve pixel-perfect match with Figma design.
 
