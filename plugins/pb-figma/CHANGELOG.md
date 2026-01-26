@@ -2,6 +2,18 @@
 
 All notable changes to the pb-figma plugin will be documented in this file.
 
+## [1.4.3] - 2026-01-27
+
+### Fixed
+- **Large File Overflow** - Design Validator now uses depth=3 (was 10) to prevent response size errors
+- **MCP Response Size** - Added error handling for responses >256KB with recovery strategies
+- **New File Write Error** - Agents now use Bash to create files before Write tool
+
+### Added
+- Bash tool to design-validator and design-analyst agents
+- Large file handling documentation with progressive depth reduction
+- File creation steps before Write operations
+
 ## [1.4.2] - 2026-01-27
 
 ### Fixed
