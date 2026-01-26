@@ -211,3 +211,42 @@ See [code-generator-base.md](./code-generator-base.md) for:
 - Error handling patterns
 - Output format structure
 ```
+
+## DOM Flattening Rules
+
+Skip unnecessary layers:
+
+❌ SKIP:
+- Frames used only for grouping (no bg/border/padding)
+- Wrapper containers with single child
+- Groups with no visual effect
+- Default-named empty wrappers ("Frame 1", "Group 2")
+
+✅ CONVERT TO DIV:
+- Has background color
+- Has border or shadow
+- Has padding/margin
+- Has border-radius
+
+## TODO Comment Strategy
+
+For missing or ambiguous values:
+
+```tsx
+// TODO: Check color - Design token 'colors/accent' not in theme
+const accentColor = "text-blue-500"; // Temporary value
+
+// TODO: Check font - 'Custom Font' not installed
+const fontFamily = "font-sans"; // Fallback
+
+// TODO: Check icon - Asset not found
+<PlaceholderIcon className="w-6 h-6" />
+```
+
+## Reference Loading
+
+Before generating code, load these references as needed:
+
+- **Token conversion issues?** → Read @references/token-mapping.md
+- **Layout problems?** → Read @references/common-issues.md
+- **Error during generation?** → Read @references/error-recovery.md
