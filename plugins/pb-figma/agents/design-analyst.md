@@ -293,6 +293,11 @@ Extract text decoration (underline, strikethrough) from text nodes via `figma_ge
 - Check `textDecoration` property on TEXT nodes
 - Values: NONE, UNDERLINE, STRIKETHROUGH
 
+**REST API Limitation:**
+- Figma REST API only provides basic `textDecoration` type (NONE/UNDERLINE/STRIKETHROUGH)
+- Advanced properties (color, thickness) are Plugin API only, not available in REST API
+- Use text node's fill color for decoration color
+
 **For each decorated text:**
 
 1. **Extract decoration properties:**
@@ -303,14 +308,13 @@ Extract text decoration (underline, strikethrough) from text nodes via `figma_ge
 
    Read from response:
      - textDecoration: UNDERLINE | STRIKETHROUGH
-     - decorationColor: { r, g, b, a }  # RGBA 0-1
-     - decorationThickness: number (px)
+     - fills: [{ hex: "#ffd100", opacity: 1.0 }]  # Use for decoration color
    ```
 
-2. **Convert to hex:**
+2. **Decoration color = text fill color:**
    ```
-   decorationColor: { r: 1.0, g: 0.82, b: 0.0, a: 1.0 }
-   → #ffd100 (opacity: 1.0)
+   Text fills[0].hex: "#ffd100" with opacity: 1.0
+   → Use this color for text decoration
    ```
 
 **In Implementation Spec - Add Text Decoration Section:**
@@ -320,16 +324,15 @@ Extract text decoration (underline, strikethrough) from text nodes via `figma_ge
 
 **Component:** {ComponentName}
 - **Decoration:** Underline | Strikethrough
-- **Color:** #ffd100 (opacity: 1.0)
-- **Thickness:** 1.0
+- **Color:** {text_fill_color} (uses text color)
 
-**SwiftUI Mapping:** `.underline(color: Color(hex: "#ffd100"))` or `.strikethrough(color: Color(hex: "#color"))`
+**SwiftUI Mapping:** `.underline(color: Color(hex: "{text_fill_color}"))` or `.strikethrough(color: Color(hex: "{text_fill_color}"))`
 ```
 
 **Rules:**
 - Only add this section if text has decoration (textDecoration ≠ NONE)
-- Include opacity even if 1.0 for consistency
-- Default thickness: 1.0 if not specified in Figma
+- Decoration color must match text fill color (REST API limitation)
+- Omit thickness property (not available in REST API)
 
 ### 4. Asset Requirements
 

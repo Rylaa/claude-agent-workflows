@@ -3,9 +3,8 @@
 ## Input
 Figma node with:
 - Text: "Hook"
-- Underline: SINGLE
-- Underline color: #ffd100 (yellow)
-- Underline thickness: 1.0
+- textDecoration: UNDERLINE
+- Text fill color: #ffd100 (yellow, opacity: 1.0)
 
 ## Expected Output in Implementation Spec
 
@@ -14,8 +13,7 @@ Figma node with:
 
 **Component:** HookText
 - **Decoration:** Underline
-- **Color:** #ffd100 (opacity: 1.0)
-- **Thickness:** 1.0
+- **Color:** #ffd100 (uses text color)
 
 **SwiftUI Mapping:** `.underline(color: Color(hex: "#ffd100"))`
 ```
