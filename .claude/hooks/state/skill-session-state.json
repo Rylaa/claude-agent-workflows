@@ -4,8 +4,9 @@
     "superpowers:brainstorming",
     "superpowers:writing-plans",
     "superpowers:subagent-driven-development",
-    "plugin-dev:plugin-structure"
+    "plugin-dev:plugin-structure",
+    "pb-frontend:frontend-dev-guidelines"
   ],
-  "frontend_guidelines_used": false,
-  "last_updated": "2026-01-25T11:48:42.426Z"
+  "frontend_guidelines_used": true,
+  "last_updated": "2026-01-25T14:58:21.979Z"
 }
