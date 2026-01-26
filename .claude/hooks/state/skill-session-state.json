@@ -5,8 +5,11 @@
     "superpowers:writing-plans",
     "superpowers:subagent-driven-development",
     "plugin-dev:plugin-structure",
-    "pb-frontend:frontend-dev-guidelines"
+    "pb-frontend:frontend-dev-guidelines",
+    "pb-figma:figma-to-code",
+    "superpowers:requesting-code-review",
+    "superpowers:finishing-a-development-branch"
   ],
   "frontend_guidelines_used": true,
-  "last_updated": "2026-01-25T14:58:21.979Z"
+  "last_updated": "2026-01-26T11:18:28.124Z"
 }
