@@ -167,6 +167,56 @@ Border Radius → Tailwind
 Custom → rounded-[Xpx]
 ```
 
+#### Opacity Handling
+
+Extract opacity for all visual properties from `figma_get_design_tokens`:
+
+**Query Pattern:**
+```typescript
+const tokens = figma_get_design_tokens({
+  file_key: "{file_key}",
+  node_id: "{node_id}",
+  include_colors: true
+});
+
+// Extract opacity from tokens
+tokens.colors.forEach(colorToken => {
+  if (colorToken.opacity && colorToken.opacity < 1.0) {
+    // Document in Implementation Spec
+  }
+});
+```
+
+**In Implementation Spec - Add Opacity Column:**
+```markdown
+## Design Tokens (Ready to Use)
+
+### Colors
+
+| Property | Color | Opacity | Usage |
+|----------|-------|---------|-------|
+| Border | #ffffff | 0.4 | `.stroke(Color.white.opacity(0.4))` |
+| Background | #150200 | 1.0 | `.background(Color(hex: "#150200"))` |
+| Text | #333333 | 0.9 | `.foregroundColor(Color.primary.opacity(0.9))` |
+```
+
+**Warning Conditions:**
+
+Add to Implementation Spec if detected:
+
+```markdown
+### Design Warnings
+
+- ⚠️ **Semi-transparent border** (opacity: 0.4): Border may appear faded over dark backgrounds. Consider increasing opacity to 0.8+ for better visibility.
+- ⚠️ **Semi-transparent text** (opacity < 1.0): Text readability may be reduced. Ensure WCAG contrast ratio compliance.
+```
+
+**Opacity extraction rules:**
+- `opacity: 1.0` → Don't add opacity modifier (default)
+- `opacity: 0.0 - 0.99` → Add opacity column and usage example
+- Border/stroke opacity < 0.8 → Add warning
+- Text opacity < 1.0 → Add warning
+
 ### 4. Asset Requirements
 
 For each asset in the inventory:
