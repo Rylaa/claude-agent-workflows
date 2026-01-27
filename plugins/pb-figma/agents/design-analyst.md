@@ -131,6 +131,63 @@ For each component, identify:
 
 **WARNING:** Never assign a trailing checkmark icon as a card's thematic icon. The spec MUST use LEADING icons for card action representation.
 
+#### Icon Parent Hierarchy Validation (CRITICAL)
+
+Before assigning ANY icon to a card, perform these validation checks:
+
+**1. Parent Hierarchy Check:**
+```
+For each icon candidate:
+1. Get icon node's parent chain via figma_get_node_details
+2. Check if card's node_id exists in parent chain
+3. If icon's parent is NOT the card → REJECT as card icon
+
+Example:
+- Card 3 node_id: 3:306
+- Icon candidate 6:44 parent: 6:32 (GrowthSection)
+- 6:32 is NOT 3:306 → REJECT 6:44 as Card 3 icon
+```
+
+**2. Size Validation:**
+```
+Card icon size limits:
+- Minimum: 16px (both dimensions)
+- Maximum: 48px (both dimensions)
+
+If icon > 50px in either dimension → NOT a card icon
+
+Example:
+- 6:44 is 66.5 x 97 px
+- 97 > 50 → REJECT as card icon (too large, likely an illustration)
+```
+
+**3. Fill Type Validation:**
+```
+Card thematic icons typically have:
+- SOLID fills (single color)
+- Simple gradients (2-3 stops, same hue family)
+
+REJECT as card icons if fill is:
+- Transparent/semi-transparent gradients (decorative overlays)
+- Gradient from color to transparent (e.g., white@10% → white@0%)
+- No fills (stroke-only decorative elements)
+
+Example:
+- 6:44 has GRADIENT_LINEAR: rgba(255,255,255,0.1) → rgba(255,255,255,0.0)
+- This is a decorative overlay pattern → REJECT as card icon
+```
+
+**4. Finding Correct Card Icons (when validation fails):**
+```
+If no valid icon found at expected position:
+1. Query card's children: figma_get_node_details(file_key, card_node_id)
+2. Find direct children with type VECTOR or FRAME
+3. Filter by X position (leftmost for leading, rightmost for trailing)
+4. Validate size (16-48px range)
+5. Validate fill (solid or simple gradient with visible color)
+6. Use first matching node as card icon
+```
+
 ### 2. Implementation Strategy
 
 For each component, determine:
@@ -585,6 +642,49 @@ Always query layer order for ALL child nodes, even if the design seems simple. L
 
 **Don't skip this step** - it's the difference between pixel-perfect and broken layouts.
 
+### 7. Preserving Flagged Frames
+
+When creating Implementation Spec, check if Validation Report contains "## Flagged for LLM Review" section:
+
+**If section exists:**
+
+1. **Copy the entire section** verbatim to Implementation Spec
+2. Keep all columns intact: Node ID, Name, Trigger, Reason
+3. Place after "## Assets Required" section
+4. Do NOT make decisions here - asset-manager will use LLM vision analysis
+
+**If section doesn't exist:**
+
+1. No action needed
+2. Proceed with normal spec generation
+
+**Example - Copying from Validation Report to Implementation Spec:**
+
+Validation Report contains:
+```markdown
+## Flagged for LLM Review
+
+| Node ID | Name | Trigger | Reason |
+|---------|------|---------|--------|
+| 6:32 | GrowthSection | Dark+Bright Siblings | Children 6:34 (dark) and 6:38 (bright) detected |
+| 6:32 | GrowthSection | Multiple Opacity | 5 values [0.2, 0.4, 0.6, 0.8, 1.0] on color #f2f20d |
+```
+
+Implementation Spec should include the same section after Assets Required:
+```markdown
+## Assets Required
+... (normal assets table) ...
+
+## Flagged for LLM Review
+
+| Node ID | Name | Trigger | Reason |
+|---------|------|---------|--------|
+| 6:32 | GrowthSection | Dark+Bright Siblings | Children 6:34 (dark) and 6:38 (bright) detected |
+| 6:32 | GrowthSection | Multiple Opacity | 5 values [0.2, 0.4, 0.6, 0.8, 1.0] on color #f2f20d |
+```
+
+**Important:** The design-analyst agent is a pass-through for this section. Do not interpret, filter, or modify the flagged frames - asset-manager will handle the final decision.
+
 ## Output
 
 Write Implementation Spec to: `docs/figma-reports/{file_key}-spec.md`
@@ -732,6 +832,15 @@ layerOrder:
 | Hero Image | `hero-image.webp` | WebP | 1:456 | 1200x600 | Lazy load, provide srcset |
 | Icon: Search | `icon-search.svg` | SVG | 1:789 | 24x24 | Use as component |
 
+## Flagged for LLM Review
+
+<!-- Copy this section verbatim from Validation Report if it exists -->
+<!-- Only include if Validation Report contains "## Flagged for LLM Review" -->
+
+| Node ID | Name | Trigger | Reason |
+|---------|------|---------|--------|
+| {node_id} | {node_name} | {trigger_type} | {reason_details} |
+
 ## Implementation Checklist
 
 ### Setup
@@ -746,6 +855,7 @@ layerOrder:
 - [ ] **absoluteY coordinates documented for all layers**
 - [ ] Design Tokens extracted and mapped
 - [ ] Asset List generated with all required assets
+- [ ] **Flagged for LLM Review section copied from Validation Report (if exists)**
 
 **If Layer Order is missing or incomplete:** Query Figma API again with `figma_get_node_details` for all children nodes to extract absoluteBoundingBox coordinates.
 
