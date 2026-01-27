@@ -144,6 +144,53 @@ Check 6:34 vs 6:38:
 Record: "Dark+Bright Siblings: 6:34 (dark) paired with 6:38 (bright)"
 ```
 
+#### 6.2 Multiple Opacity Fills Detection Algorithm
+
+**Algorithm:**
+
+```
+1. Get frame children list from figma_get_node_details response
+2. Collect all fill opacity values from children:
+   opacity_set = set()
+   for child in children:
+       child_details = figma_get_node_details(file_key, child.id)
+       for fill in child_details.fills:
+           if fill.opacity is not None:
+               opacity_set.add(round(fill.opacity, 2))
+3. Count unique opacity values
+4. If unique opacity count >= 3:
+   → TRIGGER: Multiple Opacity Fills
+   → Record: "Opacity values: {sorted list}"
+```
+
+**Color Grouping (optional refinement):**
+
+```
+For stricter detection, also check if fills share same base color:
+1. Group fills by hex color (ignoring opacity)
+2. For each color group with 3+ different opacities:
+   → TRIGGER confirmed
+```
+
+**Example:**
+
+```
+Frame 6:38 children: [6:39, 6:40, 6:41, 6:42, 6:43]
+
+Child fills collected:
+- 6:39: #f2f20d, opacity: 0.2
+- 6:40: #f2f20d, opacity: 0.4
+- 6:41: #f2f20d, opacity: 0.6
+- 6:42: #f2f20d, opacity: 0.8
+- 6:43: #f2f20d, opacity: 1.0
+
+Unique opacities: [0.2, 0.4, 0.6, 0.8, 1.0] → 5 values >= 3
+Same color (#f2f20d) with multiple opacities → Decorative gradient effect
+
+Result: TRIGGER MATCHED
+Record: "Multiple Opacity: 5 values [0.2, 0.4, 0.6, 0.8, 1.0] on color #f2f20d"
+```
+
 **Detection Process:**
 
 ```
