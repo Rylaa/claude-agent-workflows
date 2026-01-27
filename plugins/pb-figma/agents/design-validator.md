@@ -79,11 +79,21 @@ If any data is unclear or missing:
 
 | Trigger | Detection Method | Example |
 |---------|------------------|---------|
-| **Shadow + Color Siblings** | Frame has 2+ child frames where one has dark fills (#000-#444) and another has bright fills | Growth chart: 6:34 (black) + 6:38 (yellow) |
-| **Multiple Opacity Fills** | Frame children have same color but 3+ different opacity values | Bars: 0.2, 0.4, 0.6, 0.8, 1.0 |
-| **Gradient Overlay** | Vector child with gradient ending in opacity 0 | Trend arrow: white@10% → white@0% |
-| **High Vector Count** | Frame contains >10 VECTOR type descendants | Complex illustration with many paths |
+| **Dark + Bright Siblings** | Frame has 2+ child frames where one has dark fills (luminosity < 0.27) and another has bright fills (luminosity > 0.5 AND saturation > 20%) | Growth chart: 6:34 (black) + 6:38 (yellow) |
+| **Multiple Opacity Fills** | Frame children have identical hex color but 3+ different opacity values | Child fills with #f2f20d at opacities: 0.2, 0.4, 0.6, 0.8, 1.0 |
+| **Gradient Overlay** | Vector child with gradient ending in opacity 0 | Trend arrow: white with 10% opacity → white with 0% opacity |
+| **High Vector Count** | Frame contains >10 descendants where `type` field equals "VECTOR" in figma_get_node_details response | Complex illustration with many paths |
 | **Deep Nesting** | Frame nesting depth > 3 levels | Frame > Frame > Frame > Frame |
+
+**Luminosity Thresholds:**
+```
+Dark fills: luminosity < 0.27 (hex range #000000-#444444)
+Bright fills: luminosity > 0.5 AND saturation > 20%
+
+Luminosity formula: (R + G + B) / 3 / 255
+```
+
+**Note:** If a frame matches multiple triggers, list each trigger on a separate row.
 
 **Detection Process:**
 
@@ -92,10 +102,10 @@ For each frame in Assets Required:
 1. Query frame details: figma_get_node_details(file_key, node_id)
 2. Check children count and types
 3. For each trigger:
-   a. Shadow+Color: Query sibling fills, check luminosity difference
+   a. Dark+Bright: Query sibling fills, check luminosity difference
    b. Multiple Opacity: Collect opacity values from children fills
    c. Gradient Overlay: Check for gradient with opacity → 0 stop
-   d. Vector Count: Count VECTOR type descendants
+   d. Vector Count: Count descendants where type="VECTOR"
    e. Deep Nesting: Track frame depth recursively
 4. If ANY trigger matches:
    → Add to "Flagged for LLM Review" list
@@ -111,7 +121,7 @@ Add to Validation Report:
 
 | Node ID | Name | Trigger | Reason |
 |---------|------|---------|--------|
-| 6:32 | GrowthSection | Shadow+Color Siblings | Children 6:34 (dark) and 6:38 (bright) detected |
+| 6:32 | GrowthSection | Dark+Bright Siblings | Children 6:34 (dark) and 6:38 (bright) detected |
 | 6:32 | GrowthSection | Multiple Opacity | 5 opacity values: 0.2, 0.4, 0.6, 0.8, 1.0 |
 | 6:32 | GrowthSection | Gradient Overlay | Child 6:44 has transparent gradient |
 ```
