@@ -112,16 +112,18 @@ Before downloading, determine the asset type:
 
 | Asset Type | Detection Criteria | Download Strategy |
 |------------|-------------------|-------------------|
-| **SIMPLE_ICON** | Single vector path OR <10 child vectors, typically 16-48px | SVG, scale: 1 |
-| **COMPLEX_VECTOR** | Multiple vector paths (≥10 children), charts, illustrations, >100px in both width AND height | PNG, scale: 2 |
+| **SIMPLE_ICON** | Single vector path OR <10 child vectors, 16-48px, NO exportSettings | SVG, scale: 1 |
+| **COMPLEX_VECTOR** | Multiple vector paths (≥3 children), >50px in either dimension | PNG, scale: 2 |
+| **CHART_ILLUSTRATION** | Has exportSettings OR marked as illustration in Validation Report | PNG, scale: 2 |
 | **RASTER_IMAGE** | Contains image fills, photos, backgrounds | PNG/WebP, scale: 2 |
 | **IMAGE_FILL** | Node has imageRef property (photo/background) | Use figma_get_images |
 
 **Classification Priority (when node matches multiple types):**
-1. IMAGE_FILL (highest priority - has imageRef property)
-2. RASTER_IMAGE (bitmap/photo content)
-3. COMPLEX_VECTOR (≥10 vector paths)
-4. SIMPLE_ICON (lowest priority - <10 vector paths)
+1. CHART_ILLUSTRATION (highest - has exportSettings)
+2. IMAGE_FILL (has imageRef property)
+3. RASTER_IMAGE (bitmap/photo content)
+4. COMPLEX_VECTOR (≥3 vector paths, >50px)
+5. SIMPLE_ICON (lowest priority - <10 vector paths, <50px)
 
 **Example**: A node with both imageRef and vector children → Classify as IMAGE_FILL
 
