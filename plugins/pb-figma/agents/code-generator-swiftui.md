@@ -169,6 +169,38 @@ Image("{asset-name}")
 | Yes - use .template | `.renderingMode(.template)` + `.foregroundColor()` |
 | Not specified | `.renderingMode(.original)` (safe default) |
 
+### Illustration vs Icon Detection
+
+Determine asset type from dimensions:
+
+| Dimension | Type | Image() Pattern |
+|-----------|------|-----------------|
+| width ≤ 64 AND height ≤ 64 | ICON | `.frame(width:height:)` fixed size |
+| width > 64 OR height > 64 | ILLUSTRATION | `.aspectRatio(contentMode:)` flexible |
+
+**Icon Pattern:**
+```swift
+Image("icon-clock")
+    .resizable()
+    .renderingMode(.original)
+    .frame(width: 32, height: 32)
+```
+
+**Illustration Pattern:**
+```swift
+Image("growth-chart")
+    .resizable()
+    .aspectRatio(contentMode: .fit)
+    .frame(maxWidth: 354)  // Use maxWidth for flexibility
+    .clipped()
+```
+
+**Flagged Illustrations:**
+If asset was in "Flagged for LLM Review" and decided as DOWNLOAD_AS_IMAGE:
+- Always use Illustration pattern
+- Add `.clipped()` to prevent overflow
+- Consider adding `.cornerRadius()` if parent has border radius
+
 ## Layer Order Parsing
 
 **CRITICAL:** Read Layer Order from Implementation Spec to determine ZStack ordering.
