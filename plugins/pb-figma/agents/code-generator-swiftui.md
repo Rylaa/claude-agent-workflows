@@ -235,14 +235,39 @@ For each component in "## Components" section:
 ### Step 2: Apply Frame Properties in SwiftUI
 
 **Dimensions → .frame() modifier:**
+
+**When to use `width:` vs `maxWidth:`:**
+
+| Spec Context | SwiftUI Modifier | Use Case |
+|-------------|------------------|----------|
+| Fixed size component (card, button) | `.frame(width: 361, height: 80)` | Exact dimensions required |
+| Flexible container (fits screen) | `.frame(maxWidth: 361)` | Adapts to smaller screens |
+| Height-only constraint | `.frame(height: 80)` | Width determined by content |
+| Full-width with max | `.frame(maxWidth: .infinity)` | Expand to available space |
+
+**Decision rules:**
+
+1. **Use fixed `width:`** when component must be exact size (icons, badges, specific design constraints)
+2. **Use `maxWidth:`** when component should be responsive (screens narrower than design will shrink)
+3. **Combine both** for responsive with constraints: `.frame(minWidth: 200, maxWidth: 361)`
+
 ```swift
-// From spec: Dimensions: width: 361, height: 80
+// Fixed size (exact match to Figma)
 .frame(width: 361, height: 80)
 
-// For flexible containers (use maxWidth instead)
+// Flexible width (responsive)
 .frame(maxWidth: 361)
 .frame(height: 80)
+
+// Full-width card with max constraint
+.frame(maxWidth: .infinity)
+.frame(height: 80)
+
+// Responsive with minimum size
+.frame(minWidth: 280, maxWidth: 361, minHeight: 60, maxHeight: 80)
 ```
+
+**Default recommendation:** Use fixed `width:` for components, use `maxWidth:` for screen-level containers.
 
 **Corner Radius → .clipShape() or .cornerRadius() modifier:**
 
@@ -267,6 +292,29 @@ For each component in "## Components" section:
 )
 ```
 
+**CRITICAL - Corner Radius Terminology Mapping:**
+
+Figma uses geometric corners (TopLeft, TopRight), SwiftUI uses reading direction (Leading, Trailing):
+
+| Figma/Spec | SwiftUI Parameter | Position |
+|------------|-------------------|----------|
+| TL (TopLeft) | `topLeadingRadius` | Top-left corner |
+| TR (TopRight) | `topTrailingRadius` | Top-right corner |
+| BL (BottomLeft) | `bottomLeadingRadius` | Bottom-left corner |
+| BR (BottomRight) | `bottomTrailingRadius` | Bottom-right corner |
+
+**Example conversion:**
+```
+Spec: "TL:16 TR:16 BL:0 BR:0"
+↓
+UnevenRoundedRectangle(
+    topLeadingRadius: 16,     // TL
+    bottomLeadingRadius: 0,   // BL
+    bottomTrailingRadius: 0,  // BR
+    topTrailingRadius: 16     // TR
+)
+```
+
 **Per-corner radius (iOS 15 compatibility):**
 ```swift
 // Use custom Shape for iOS 15 support
@@ -274,18 +322,52 @@ For each component in "## Components" section:
 ```
 
 **Border → .overlay() with RoundedRectangle.stroke():**
+
+**Hex-Alpha Color Parsing:**
+
+When spec shows `#RRGGBBAA` format (8 characters), the last 2 hex digits are alpha:
+```
+#FFFFFF40 → Color: #FFFFFF, Alpha: 0x40 = 64/255 = 0.25 opacity
+#FF000080 → Color: #FF0000, Alpha: 0x80 = 128/255 = 0.50 opacity
+#00FF00FF → Color: #00FF00, Alpha: 0xFF = 255/255 = 1.0 opacity
+```
+
+**SwiftUI conversion:**
 ```swift
-// From spec: Border: 1px #FFFFFF opacity:0.4 inside
+// Spec: "#FFFFFF40" → separate color and opacity
+Color(hex: "#FFFFFF").opacity(0.25)  // 0x40/255 = 0.25
+
+// OR use 8-char hex directly with Color+Hex extension
+Color(hex: "#FFFFFF40")  // Extension handles ARGB format
+```
+
+**Stroke Alignment Patterns:**
+
+| Figma Alignment | SwiftUI Pattern | Notes |
+|----------------|-----------------|-------|
+| INSIDE | `.overlay()` with stroke | Default, no adjustment needed |
+| OUTSIDE | `.padding()` then `.overlay()` | Add padding = strokeWidth/2 |
+| CENTER | `.overlay()` with inset | Stroke centered on edge |
+
+```swift
+// INSIDE stroke (default - stroke inside bounds)
 .overlay(
     RoundedRectangle(cornerRadius: 12)
         .stroke(Color.white.opacity(0.4), lineWidth: 1)
 )
 
-// For outside stroke, add padding adjustment
-.padding(1)  // Half of stroke width for outside alignment
+// OUTSIDE stroke (stroke outside bounds)
+.padding(1)  // Half of stroke width
 .overlay(
     RoundedRectangle(cornerRadius: 12)
         .stroke(Color.white.opacity(0.4), lineWidth: 2)
+)
+
+// CENTER stroke (stroke centered on edge)
+.overlay(
+    RoundedRectangle(cornerRadius: 12)
+        .inset(by: 0.5)  // Half of stroke width
+        .stroke(Color.white.opacity(0.4), lineWidth: 1)
 )
 ```
 
@@ -443,6 +525,44 @@ extension Color {
 4. `Design Tokens` → Copy Usage column directly
 5. `Asset Children` → `Image()` calls with correct renderingMode
 6. Include `Color+Hex` extension when using hex colors
+
+**CRITICAL - Modifier Ordering:**
+
+SwiftUI modifiers apply in order. The correct sequence for frame properties:
+
+```swift
+.padding()           // 1. Internal padding (affects content)
+.frame()             // 2. Size constraints
+.background()        // 3. Background color/gradient
+.clipShape()         // 4. Clip to shape (BEFORE overlay)
+.overlay()           // 5. Border stroke (AFTER clipShape)
+.shadow()            // 6. Shadow (outermost)
+```
+
+**Why this order matters:**
+
+| Wrong Order | Problem |
+|-------------|---------|
+| `.overlay()` before `.clipShape()` | Border gets clipped, corners cut off |
+| `.background()` after `.clipShape()` | Background bleeds outside rounded corners |
+| `.shadow()` before `.clipShape()` | Shadow shape doesn't match clipped shape |
+| `.frame()` after `.clipShape()` | Frame size may not match clipped content |
+
+**Example - Correct modifier chain:**
+```swift
+HStack(spacing: 16) {
+    // content
+}
+.padding(.horizontal, 16)        // 1. Internal padding
+.frame(width: 361, height: 80)   // 2. Size
+.background(Color(hex: "#150200")) // 3. Background
+.clipShape(RoundedRectangle(cornerRadius: 12)) // 4. Clip
+.overlay(                        // 5. Border
+    RoundedRectangle(cornerRadius: 12)
+        .stroke(Color.white.opacity(0.4), lineWidth: 1)
+)
+.shadow(color: .black.opacity(0.1), radius: 4, y: 2) // 6. Shadow
+```
 
 ## Layer Order Parsing
 

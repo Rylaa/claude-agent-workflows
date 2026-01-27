@@ -118,7 +118,7 @@ Verify token usage matches spec:
 - [ ] **Border/stroke** - Border width, color, opacity match spec
 - [ ] **Shadows/Effects** - Shadow and blur effects applied
 
-**Verification Method:**
+**Verification Method (React/Tailwind):**
 ```
 # Check for CSS custom properties
 Grep("var\\(--color-", path="{component_file_path}")
@@ -127,6 +127,32 @@ Grep("var\\(--spacing-", path="{component_file_path}")
 
 # Check for Tailwind classes from spec
 Grep("{expected_tailwind_class}", path="{component_file_path}")
+```
+
+**Verification Method (SwiftUI):**
+```
+# Check for frame dimensions
+Grep("\\.frame\\(width:", path="{component_file_path}")
+Grep("\\.frame\\(height:", path="{component_file_path}")
+Grep("\\.frame\\(maxWidth:", path="{component_file_path}")
+
+# Check for corner radius
+Grep("\\.clipShape\\(RoundedRectangle", path="{component_file_path}")
+Grep("\\.cornerRadius\\(", path="{component_file_path}")
+Grep("UnevenRoundedRectangle", path="{component_file_path}")
+
+# Check for borders
+Grep("\\.overlay\\(RoundedRectangle", path="{component_file_path}")
+Grep("\\.stroke\\(.*lineWidth:", path="{component_file_path}")
+
+# Check for color tokens
+Grep("Color\\(hex:", path="{component_file_path}")
+Grep("Color\\(\"", path="{component_file_path}")
+Grep("\\.foregroundColor\\(", path="{component_file_path}")
+Grep("\\.background\\(", path="{component_file_path}")
+
+# Check for opacity application
+Grep("\\.opacity\\([0-9]", path="{component_file_path}")
 ```
 
 ### 3. Assets
