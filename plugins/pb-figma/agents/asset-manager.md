@@ -139,6 +139,127 @@ Before downloading, determine the asset type:
 - Difficult to style or modify individual elements
 - Better as optimized raster at target resolution
 
+#### 2.1.1 Composite Illustration Detection (CRITICAL)
+
+**Problem:** Multi-layer illustrations may have shadow/background layers with dark fills that get exported instead of the visually dominant layer.
+
+**Detection Process:**
+
+1. **When a frame has exportSettings, check children fills:**
+   ```
+   figma_get_node_details(file_key, node_id)
+   → Get children list
+   → For each child, query fills via figma_get_node_details
+   ```
+
+2. **Classify each child by fill luminosity:**
+   ```
+   Dark fills: hex values #000000-#444444 range
+   - Calculate: (R + G + B) / 3 < 68 → DARK
+
+   Bright fills: hex values with high saturation/luminosity
+   - Has specific hue (not grayscale)
+   - Luminosity > 50%
+   ```
+
+3. **Identify layer roles:**
+   ```
+   SHADOW_LAYER: Frame with children having dark/grayscale fills
+   PRIMARY_ILLUSTRATION: Frame with children having bright/colored fills
+   DECORATIVE_OVERLAY: Vector with transparent gradient (opacity → 0)
+   ```
+
+4. **Export decision:**
+   ```
+   If exportSettings node has DARK fills AND sibling has BRIGHT fills:
+   → Export the sibling with BRIGHT fills instead
+   → Document swap in spec: "Exported 6:38 instead of 6:34 (shadow layer)"
+
+   If only one layer exists:
+   → Export as-is
+
+   If composite effect is intentional (shadow + color overlay):
+   → Use figma_get_screenshot for the parent frame
+   ```
+
+**Example:**
+```
+Frame 6:32 (GrowthSection)
+├── 6:34 (children: #3c3c3c gradient) → SHADOW_LAYER - skip
+├── 6:38 (children: #f2f20d fills)   → PRIMARY_ILLUSTRATION - export this
+└── 6:44 (gradient white→transparent) → DECORATIVE_OVERLAY - skip
+
+Result: Export 6:38, not 6:34
+```
+
+**Warning signs that trigger this check:**
+- Frame with exportSettings has grayscale/dark children fills
+- Sibling frames have matching dimensions but different fill colors
+- Frame name suggests shadow/background purpose
+
+#### 2.1.2 LLM Vision Analysis for Flagged Frames
+
+**Purpose:** Use Claude vision to make final decision on frames flagged by design-validator complexity triggers.
+
+**When to Use:** Only for frames listed in "Flagged for LLM Review" section of the Implementation Spec.
+
+**Process:**
+
+```
+1. Check Implementation Spec for "## Flagged for LLM Review" table
+2. For each flagged frame:
+   a. Take screenshot: figma_get_screenshot(file_key, [node_id], scale=2)
+   b. Analyze screenshot using vision reasoning (see prompt below)
+   c. Record decision: DOWNLOAD_AS_IMAGE or GENERATE_AS_CODE
+3. Update spec with decisions
+4. Apply decision to download strategy
+```
+
+**Vision Analysis Reasoning:**
+
+When analyzing a flagged frame screenshot, consider:
+
+```
+1. **Visual Complexity:**
+   - Does it have overlapping decorative layers? → Likely illustration
+   - Are there effects hard to replicate in code? → Likely illustration
+   - Is it a stylized graphic rather than standard UI? → Likely illustration
+
+2. **Data Representation:**
+   - Does it show real/dynamic data that changes? → Generate as code
+   - Is it purely decorative/conceptual? → Download as image
+
+3. **Interactivity Potential:**
+   - Would users interact with individual parts? → Generate as code
+   - Is it a static visual element? → Download as image
+
+4. **Code Complexity Estimate:**
+   - Would coding this require >50 lines with complex positioning? → Download as image
+   - Is it achievable with simple shapes/gradients? → Generate as code
+
+**Decision:** DOWNLOAD_AS_IMAGE | GENERATE_AS_CODE
+**Reason:** [Brief explanation]
+```
+
+**Recording Decisions:**
+
+Add to Implementation Spec after analyzing:
+
+```markdown
+## Flagged Frames - LLM Decisions
+
+| Node ID | Name | Decision | Reason |
+|---------|------|----------|--------|
+| 6:32 | GrowthSection | DOWNLOAD_AS_IMAGE | Decorative chart with shadow+color overlay effects, not real data |
+```
+
+**Download Strategy Based on Decision:**
+
+| Decision | Action |
+|----------|--------|
+| DOWNLOAD_AS_IMAGE | Use `figma_get_screenshot` at 2x scale, save as PNG to `public/assets/images/` |
+| GENERATE_AS_CODE | Skip in asset download, pass to code-generator agent |
+
 #### 2.2 Download by Asset Type
 
 ##### Simple Icons (SVG format)
@@ -222,6 +343,46 @@ done
 ```
 
 **Note:** URLs from Figma are temporary (valid for ~30 days). Download promptly after export.
+
+#### 2.5 SVG Icon Template Mode Preparation
+
+When downloading SVG icons for SwiftUI/iOS, prepare them for proper rendering mode compatibility.
+
+**Problem:** SVG icons may have hardcoded `fill="#XXXXXX"` attributes that conflict with SwiftUI's `.renderingMode(.template)`.
+
+**Detection Process:**
+
+1. **After downloading SVG, check for hardcoded fills:**
+   ```bash
+   # Check if SVG has hardcoded color fills
+   grep -o 'fill="#[0-9A-Fa-f]\{6\}"' icon.svg
+   ```
+
+2. **Classify SVG for rendering mode:**
+
+   | SVG Fill Type | Template Compatible | Recommended Mode |
+   |---------------|---------------------|------------------|
+   | No fill attribute | Yes | `.renderingMode(.template)` |
+   | `fill="currentColor"` | Yes | `.renderingMode(.template)` |
+   | `fill="#XXXXXX"` (hardcoded) | No | `.renderingMode(.original)` |
+   | Multiple different fills | No | `.renderingMode(.original)` |
+
+3. **Document in Downloaded Assets table:**
+   ```markdown
+   | Asset | Local Path | Fill Type | Template Compatible |
+   |-------|------------|-----------|---------------------|
+   | icon-clock.svg | `public/assets/icons/icon-clock.svg` | #F2F20D | No - use .original |
+   | icon-search.svg | `public/assets/icons/icon-search.svg` | none | Yes - use .template |
+   ```
+
+**Optional: Convert to template-ready (if requested by user):**
+
+```bash
+# Replace hardcoded fills with "currentColor" for template mode
+sed -i '' 's/fill="#[0-9A-Fa-f]\{6\}"/fill="currentColor"/g' icon.svg
+```
+
+**Note:** Only convert if user explicitly requests template-ready icons. Some designs intentionally use specific fill colors.
 
 ### 3. Validate Downloads
 
