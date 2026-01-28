@@ -196,6 +196,8 @@ If asset was in "Flagged for LLM Review" and decided as DOWNLOAD_AS_IMAGE:
 
 ### Image-with-Text Detection
 
+> **See also:** [Image-with-Text Handling](#image-with-text-handling) (Step 1.5) for processing the `[contains-text]` annotation produced by design-analyst. This section handles heuristic detection from Flagged Frames; the Step 1.5 section handles the explicit annotation during Asset Children replacement.
+
 **Problem:** Some illustration assets already contain text labels. Adding code-generated text creates duplication.
 
 **Detection from Implementation Spec:**
@@ -764,6 +766,8 @@ For each entry in component's Asset Children:
 - First Asset Child = first in HStack/top in VStack
 
 #### Image-with-Text Handling
+
+> **See also:** [Image-with-Text Detection](#image-with-text-detection) for the heuristic-based detection from Flagged Frames. This section handles the explicit `[contains-text]` annotation path during Asset Children replacement.
 
 When an Asset Children entry includes `[contains-text: "..."]` annotation:
 
