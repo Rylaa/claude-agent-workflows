@@ -572,6 +572,8 @@ Any of the following:
 - More than 3 critical issues
 - TypeScript compilation errors
 - Layer order completely reversed or critical components rendered in wrong order
+- Unresolved assets present (spec contains "Unresolved Assets" section with unresolved icons)
+- Placeholder icons used (code contains `questionmark.square.dashed` or `// TODO: Unresolved icon`)
 
 ## Error Handling
 
