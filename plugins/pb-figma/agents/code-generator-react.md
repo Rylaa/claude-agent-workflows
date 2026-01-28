@@ -504,6 +504,60 @@ Replace hardcoded values with CSS custom properties or Tailwind tokens from the 
 <div className="bg-primary text-foreground">
 ```
 
+##### Apply Opacity from Spec
+
+**Copy Usage column from Design Tokens table** - it contains the complete Tailwind/CSS pattern.
+
+```markdown
+| Property | Color | Opacity | Usage |
+|----------|-------|---------|-------|
+| Border | #FFFFFF | 0.4 | `border-white/40` |
+| Background | #150200 | 0.8 | `bg-[#150200]/80` |
+| Text | #CCCCCC | 0.6 | `text-[#CCCCCC]/60` |
+```
+
+**Key rules:**
+1. **Primary source: Usage column** - Copy exactly as shown
+2. **Never ignore opacity modifiers** - If Usage shows `/40`, include it
+3. **opacity: 1.0** - No opacity modifier needed (default)
+4. **opacity: 0.0** - Element is invisible, verify intentional
+
+**Tailwind opacity patterns:**
+
+```tsx
+// Background with opacity
+<div className="bg-primary/50">     // 50% opacity
+<div className="bg-[#FF0000]/25">   // 25% opacity on hex
+
+// Text with opacity
+<p className="text-white/80">       // 80% opacity text
+
+// Border with opacity
+<div className="border-white/40">   // 40% opacity border
+
+// Using CSS variable with opacity
+<div className="bg-[var(--color-primary)]/50">
+```
+
+**CSS alternative (when Tailwind modifiers don't work):**
+
+```tsx
+// Using rgba()
+<div style={{ backgroundColor: 'rgba(255, 255, 255, 0.4)' }}>
+
+// Using CSS custom property
+<div style={{ backgroundColor: 'var(--color-primary)', opacity: 0.5 }}>
+```
+
+**Common opacity conversions:**
+
+| Hex Alpha | Decimal | Tailwind |
+|-----------|---------|----------|
+| 40 (0x40) | 0.25 | `/25` |
+| 80 (0x80) | 0.50 | `/50` |
+| BF (0xBF) | 0.75 | `/75` |
+| E6 (0xE6) | 0.90 | `/90` |
+
 ##### Add Semantic HTML
 
 Ensure proper semantic elements per the spec:
