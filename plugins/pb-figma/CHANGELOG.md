@@ -2,6 +2,29 @@
 
 All notable changes to the pb-figma plugin will be documented in this file.
 
+## [1.10.0] - 2026-01-28
+
+### Fixed
+- **Asset Manager** - Replaced invalid `figma_find_children` tool with `figma_get_node_details`
+- **Tool Declarations** - Added missing Read tool to design-validator agent frontmatter
+- **Reference Paths** - Standardized to `@skills/figma-to-code/references/` format in code-generator-base
+
+### Changed
+- **Vue/Kotlin Generators** - Marked as placeholder status in documentation
+- **Prompt Templates** - Marked unused prompts as inactive with explanatory note
+- **CI/CD Reference** - Fixed reference to non-existent "handoff" agent
+
+### Added
+- **opacity-extraction.md** - Shared reference for opacity handling (extracted from 2 agents)
+- **layer-order-hierarchy.md** - Shared reference for layer order algorithm (extracted from 3 agents)
+- **asset-classification-guide.md** - Shared reference for asset classification (extracted from 3 agents)
+- **Flagged Frames Workflow** - Explicit documentation of decision flow across agents
+
+### Removed
+- Duplicate opacity documentation (~200 lines consolidated)
+- Duplicate layer order documentation (~300 lines consolidated)
+- Duplicate asset classification documentation (~150 lines consolidated)
+
 ## [1.9.1] - 2026-01-28
 
 ### Fixed

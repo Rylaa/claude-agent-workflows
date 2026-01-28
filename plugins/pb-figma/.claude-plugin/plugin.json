@@ -1,6 +1,6 @@
 {
   "name": "pb-figma",
-  "version": "1.9.1",
+  "version": "1.10.0",
   "description": "Figma-to-code conversion with 5-agent pipeline. Validates designs, creates specs, manages assets, generates code, and verifies compliance using Pixelbyte Figma MCP Server.",
   "author": {
     "name": "Pixelbyte",

@@ -2,6 +2,7 @@
 name: design-validator
 description: Validates Figma design completeness by checking all required design tokens, assets, typography, colors, spacing, and effects. Uses Pixelbyte Figma MCP to fetch missing details. Outputs a Validation Report for the next agent in the pipeline.
 tools:
+  - Read
   - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_get_file_structure
   - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_get_node_details
   - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_get_design_tokens
