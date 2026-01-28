@@ -218,88 +218,27 @@ Bash("npx tsc --noEmit {component_file_path}")
 
 ### 6. Layer Order Validation
 
-**Purpose:** Verify generated code respects layer order from spec.
+See: @skills/figma-to-code/references/layer-order-hierarchy.md
+
+**Key rule:** Use children array order, not Y coordinate.
 
 **Check:**
 1. Read layerOrder from Implementation Spec
 2. Parse component rendering order from generated code
-3. Compare zIndex order matches code order
+3. Verify zIndex order matches code order
 
-**Example validation:**
-
-Spec says:
-```yaml
-layerOrder:
-  - PageControl (zIndex: 900)
-  - ContinueButton (zIndex: 100)
-```
-
-React code must have:
-```tsx
-<PageControl /> {/* First = top */}
-<ContinueButton />      {/* Second = bottom */}
-```
-
-SwiftUI code must have:
-```swift
-// SwiftUI renders LAST element on TOP (reverse of JSX)
-// Order by zIndex ASCENDING (lowest first)
-ContinueButton()      {/* zIndex: 100 - renders behind */}
-PageControl()         {/* zIndex: 900 - renders on top */}
-```
+**Framework rules:**
+- **React:** Last element = renders on top (zIndex ascending in code)
+- **SwiftUI:** Last element in ZStack = renders on top (zIndex ascending in code)
 
 **Validation result:**
 - ✅ PASS: Order matches spec
-- ❌ FAIL: Order doesn't match spec → request Code Generator fix
-
-#### Position Validation
-
-Verify components with `position: top` are actually positioned at top:
-
-**React:** Check for `top-0`, `top-[60px]`, or similar Tailwind classes
-**SwiftUI:** Check for `.frame(alignment: .top)` or `.position(y: 60)`
-
-**Common mistakes:**
-- Component marked `position: top` in spec but has `bottom-0` class
-- absoluteY value doesn't match between spec and code
-
-**Verification Method:**
-```
-# Check for layerOrder in spec
-Grep("layerOrder:", path="docs/figma-reports/{file_key}-spec.md")
-
-# For React: Check rendering order matches zIndex order
-# Read component file and verify JSX element order
-Read("{component_file_path}")
-
-# Parse JSX component order (look for component tags in render/return)
-Grep("<(PageControl|ContinueButton|HeroImage)", path="{component_file_path}")
-
-# Verify order: Components should appear in zIndex descending order
-# First match = highest zIndex (renders on top)
-
-**Edge cases to handle:**
-- Wrapped components: `<div><ComponentName /></div>` counts as ComponentName
-- Conditional rendering: `{condition && <Component />}` - note as potential issue
-- Fragments: `<><Component /></>` - Component position still counts
-
-# For React: Check position classes
-Grep("top-\\[?[0-9]+", path="{component_file_path}")
-Grep("bottom-\\[?[0-9]+", path="{component_file_path}")
-
-# For SwiftUI: Check alignment and position
-Grep("\\.frame.*alignment.*\\.top", path="{component_file_path}")
-Grep("\\.position\\(y:", path="{component_file_path}")
-
-# Verify absoluteY coordinates match spec
-Grep("absoluteY:", path="docs/figma-reports/{file_key}-spec.md")
-```
+- ❌ FAIL: Order doesn't match → request Code Generator fix
 
 **Edge Cases:**
-- **Same zIndex:** Components with identical zIndex can render in any order relative to each other
-- **Missing zIndex:** Components without explicit zIndex in spec should use document order
-- **Conditional rendering:** If component is conditionally rendered, note in report as WARNING
-- **Nested components:** layerOrder applies to direct children of the container frame
+- Same zIndex: Components can render in any relative order
+- Missing zIndex: Use document order as fallback
+- Conditional rendering: Note as WARNING in report
 
 ## Verification Process
 

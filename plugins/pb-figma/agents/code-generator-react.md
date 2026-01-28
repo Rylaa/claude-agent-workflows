@@ -93,33 +93,22 @@ Options:
 
 ## Layer Order Parsing
 
-**CRITICAL:** Read Layer Order from Implementation Spec to determine component rendering order.
+See: @skills/figma-to-code/references/layer-order-hierarchy.md
 
-**React rendering:** Array order = visual order (first element renders first/behind)
+**Key rule:** Use children array order, not Y coordinate.
 
-**Example spec:**
-```yaml
-layerOrder:
-  - layer: PageControl (zIndex: 900)
-  - layer: HeroImage (zIndex: 500)
-  - layer: ContinueButton (zIndex: 100)
-```
+**React rendering:** Last element in code = renders on top (CSS stacking context)
 
-**Generated JSX order:**
 ```tsx
-// Render in zIndex order (highest first)
-<div className="container">
-  <PageControl /> {/* zIndex 900 - renders on top */}
-  <HeroImage />   {/* zIndex 500 - middle */}
-  <ContinueButton />      {/* zIndex 100 - bottom */}
+// Sort by zIndex ascending - lowest first in code
+<div className="relative">
+  <ContinueButton />  {/* zIndex 100 - bottom */}
+  <HeroImage />       {/* zIndex 500 - middle */}
+  <PageControl />     {/* zIndex 900 - top */}
 </div>
 ```
 
-**Validation:**
-1. Parse layerOrder from spec
-2. Sort by zIndex (highest first)
-3. Render components in sorted order
-4. Use absolute positioning if absoluteY is specified
+**Fallback:** If `layerOrder` missing, use component order from spec.
 
 ### Absolute Positioning
 

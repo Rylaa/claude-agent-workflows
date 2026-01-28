@@ -573,94 +573,24 @@ For each component identified in the hierarchy:
 
 ### 6. Layer Order Analysis
 
-Extract and document the z-index/layer hierarchy from Figma to ensure accurate rendering order in generated code.
+See: @skills/figma-to-code/references/layer-order-hierarchy.md
 
-#### Why Layer Order Matters
+**Key rule:** Use children array order, NOT Y coordinate.
 
-Figma's visual stacking order determines which elements appear on top. Without explicit layer order documentation:
-- Code generators may render components in arbitrary order
-- Visual positioning can be incorrect (e.g., page controls appearing at bottom instead of top)
-- Z-index conflicts occur when manually adjusting
-
-#### Extracting Layer Order from Figma
-
-Use the Figma MCP tools to query node details and absoluteBoundingBox coordinates:
-
-**Query Pattern:**
 ```typescript
-// Get node details including absolute coordinates
-const nodeDetails = figma_get_node_details({
-  file_key: "{file_key}",
-  node_id: "{node_id}"
-});
-
-// Use Figma children array order (NOT Y coordinate)
-// children[0] = back layer (lowest in Figma layer panel)
-// children[n-1] = front layer (highest in Figma layer panel)
 const layerOrder = nodeDetails.children.map((child, index) => ({
   layer: child.name,
   zIndex: (index + 1) * 100,  // First child = 100, last child = highest
-  position: determinePosition(child.absoluteBoundingBox?.y, containerHeight),
-  absoluteY: child.absoluteBoundingBox?.y,
-  children: child.children?.map(c => c.name) || []
+  position: getPositionContext(child)
 }));
 ```
 
-**Why children array order, not Y coordinate?**
+**Position context:** Calculate from relativeY = absoluteY / containerHeight:
+- relativeY < 0.33 → 'top'
+- relativeY < 0.67 → 'center'
+- Otherwise → 'bottom'
 
-Figma's layer panel order != Y coordinate order. Overlay elements can have ANY Y coordinate but MUST render on top based on layer panel position.
-
-**Example:**
-- Background: Y=0 (full screen) + Layer Panel BOTTOM → zIndex 100
-- PageControl: Y=60 (top of screen) + Layer Panel TOP → zIndex 300
-
-If sorted by Y (incorrectly assuming lower Y = higher visual priority):
-  Background at Y=0 → assigned highest zIndex 1000 ❌ WRONG
-
-Correct approach using layer panel order:
-  Background at layer panel bottom (index 0) → zIndex 100 ✅ CORRECT
-  PageControl at layer panel top (index 2) → zIndex 300 ✅ CORRECT
-
-**Critical:** Always use children array order for accurate layer hierarchy.
-
-**Position Context Determination:**
-
-Calculate position context based on relative Y position:
-
-**Determine position context:**
-Calculate relativeY = absoluteY / containerHeight:
-- If relativeY < 0.33 → base position is 'top'
-- If relativeY < 0.67 → base position is 'center'
-- Otherwise → base position is 'bottom'
-
-**Position context values:**
-- Use descriptive labels that indicate both general position and context
-- Examples: 'top-below-status', 'center-hero', 'bottom-above-cta'
-- Base position (top/center/bottom) calculated from relativeY
-- Add context suffix based on nearby elements or purpose
-- Simple values like 'top', 'center', 'bottom' are also valid for straightforward cases
-
-#### Layer Order Rules
-
-1. **Higher zIndex = renders on top**
-   - Assign based on children array index: `(index + 1) * 100`
-   - First child (index 0) = zIndex 100 (back layer)
-   - Last child (index n-1) = highest zIndex (front layer)
-   - Leaves room for intermediate layers (e.g., 150, 250)
-
-2. **Never sort by Y coordinate** - Figma layer panel order is authoritative
-
-3. **Capture absoluteY for context** - Record Y position but don't use for sorting
-
-4. **Document position context** - Classify as "top", "center", "bottom", "full" based on Y
-
-#### Critical: Query ALL Nodes
-
-Always query layer order for ALL child nodes, even if the design seems simple. Layer order matters for:
-- Overlays and modals
-- Navigation bars and headers
-- Floating action buttons
-- Page indicators and controls
+**Critical:** Always query ALL nodes - layer order matters for overlays, headers, FABs.
 - Background images and decorative elements
 
 **Don't skip this step** - it's the difference between pixel-perfect and broken layouts.
