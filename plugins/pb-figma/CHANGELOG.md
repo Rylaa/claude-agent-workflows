@@ -2,6 +2,24 @@
 
 All notable changes to the pb-figma plugin will be documented in this file.
 
+## [1.11.0] - 2026-01-28
+
+### Added
+- **Asset Node Map** - React agent now builds asset node map for proper Image/img generation
+- **Frame Properties Map** - Tailwind dimension, border-radius, border patterns from spec
+- **Opacity Handling** - Tailwind opacity modifiers (`/25`, `/50`, etc.) from Design Tokens
+- **Gradient Support** - CSS linear-gradient, radial-gradient, conic-gradient mapping
+- **Text Decoration** - Underline/strikethrough with custom colors via Tailwind
+- **Required Utilities** - cn() utility, CSS variables setup, Tailwind 4 @theme
+- **Icon/SVG Patterns** - lucide-react, SVG components, next/image selection guide
+- **CVA Variants** - class-variance-authority pattern for multi-variant components
+- **Responsive Patterns** - Figma constraints to Tailwind breakpoints mapping
+
+### Changed
+- React agent process steps expanded from 8 to 10 (includes Asset Node Map, Frame Properties Map)
+- Component checklist expanded from 6 to 20 items matching SwiftUI agent
+- React agent now matches SwiftUI agent's comprehensiveness (~1500 lines)
+
 ## [1.10.0] - 2026-01-28
 
 ### Fixed
