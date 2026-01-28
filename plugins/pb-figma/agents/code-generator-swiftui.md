@@ -1183,6 +1183,77 @@ private var titleText: some View {
 ❌ Using + without parentheses as body → Type inference issues
 ✅ Wrap in `Group { }` or parentheses when returning from body
 
+##### Apply Text Sizing from Spec
+
+**Read from Implementation Spec:**
+
+Check for text sizing properties in each component's property table:
+
+```markdown
+| Property | Value |
+|----------|-------|
+| **Auto-Resize** | `HEIGHT` |
+| **Frame Dimensions** | `311 × 38` |
+| **Line Count Hint** | `2` |
+```
+
+**SwiftUI Code Generation by Auto-Resize Mode:**
+
+**1. `HEIGHT` (width fixed, height adjusts):**
+```swift
+// Default behavior — no lineLimit needed
+Text("Description text that may wrap to multiple lines")
+    .font(.system(size: 14))
+    .foregroundColor(.white.opacity(0.7))
+// Do NOT add .lineLimit() — let text wrap naturally
+```
+
+**2. `TRUNCATE` (fixed frame, text truncated):**
+```swift
+Text("Text that should truncate if too long")
+    .font(.system(size: 14))
+    .foregroundColor(.white.opacity(0.7))
+    .lineLimit(2) // lineCountHint from spec
+    .truncationMode(.tail)
+```
+
+**3. `NONE` (fixed frame, text may clip):**
+```swift
+Text("Fixed frame text")
+    .font(.system(size: 14))
+    .foregroundColor(.white.opacity(0.7))
+    .frame(width: 311, height: 38) // exact frame dimensions from spec
+    .clipped()
+```
+
+**4. `WIDTH_AND_HEIGHT` (both dimensions adjust):**
+```swift
+// No constraints — text sizes to content
+Text("Auto-sizing text")
+    .font(.system(size: 14))
+    .foregroundColor(.white.opacity(0.7))
+    .fixedSize() // prevent truncation in both dimensions
+```
+
+**Rules:**
+1. If `Auto-Resize` is `HEIGHT` → do NOT add `.lineLimit()` (let text wrap freely)
+2. If `Auto-Resize` is `TRUNCATE` → add `.lineLimit(N)` using `Line Count Hint` value (default to `1` if not provided)
+3. If `Auto-Resize` is `NONE` → add `.frame(width:height:)` and `.clipped()`
+4. If `Auto-Resize` is `WIDTH_AND_HEIGHT` → add `.fixedSize()` (both axes)
+5. If no `Auto-Resize` property in spec → default to `HEIGHT` behavior (no lineLimit)
+6. When `Line Count Hint` > 1 and no explicit `Auto-Resize` → ensure no `.lineLimit(1)` is applied
+
+**Common mistakes:**
+
+❌ Adding `.lineLimit(1)` when Auto-Resize is `HEIGHT` → Text truncated unexpectedly
+✅ No `.lineLimit()` when Auto-Resize is `HEIGHT` → Text wraps naturally
+
+❌ Missing `.truncationMode(.tail)` with `.lineLimit()` → Default may vary
+✅ Always pair `.lineLimit(N)` with `.truncationMode(.tail)` for TRUNCATE mode
+
+❌ Using `.frame(maxHeight:)` for `NONE` mode → Text may overflow
+✅ Using `.frame(width:height:).clipped()` for `NONE` mode → Clean clipping
+
 ##### Use Proper View Structure
 
 Ensure proper SwiftUI View protocol implementation:
