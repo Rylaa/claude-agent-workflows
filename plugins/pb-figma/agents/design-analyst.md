@@ -583,6 +583,13 @@ if (nodeDetails.characterStyleOverrides?.length > 0) {
   const styleTable = nodeDetails.styleOverrideTable;
 
   for (const [key, style] of Object.entries(styleTable)) {
+    // KNOWN BUG: styleOverrideTable may return {} for default-value overrides
+    // When style is empty object, use node's base style instead
+    if (Object.keys(style).length === 0) {
+      // Empty override = default style (use node's fills, fontSize, fontWeight)
+      continue; // Characters with this override use base text style
+    }
+
     // Each style may have different fills (colors)
     const fills = style.fills;
     // Extract color for each style variation
@@ -636,6 +643,66 @@ Text("Let's fix your ")
 2. If overrides exist, extract each style from `styleOverrideTable`
 3. Document character ranges and their styles
 4. If API doesn't support, flag for visual inspection
+5. If `styleOverrideTable` contains empty objects `{}` for an override index, treat those characters as using the node's base style (fills, fontSize, fontWeight from the TEXT node itself). This is a known Figma REST API behavior where default-value overrides return empty objects instead of explicit values.
+
+#### Text Sizing & Auto-Resize Detection
+
+**Problem:** Without knowing how Figma sizes a text frame, the code generator cannot determine if text should wrap, truncate, or auto-size.
+
+**Detection via Figma API:**
+
+When `figma_get_node_details` returns a TEXT node, extract these sizing properties:
+
+```typescript
+const nodeDetails = figma_get_node_details({
+  file_key: "{file_key}",
+  node_id: "{text_node_id}"
+});
+
+// Text auto-resize mode
+const textAutoResize = nodeDetails.textAutoResize;
+// Values: "NONE" | "HEIGHT" | "WIDTH_AND_HEIGHT" | "TRUNCATE"
+
+// Text frame dimensions
+const frameWidth = nodeDetails.absoluteBoundingBox?.width;
+const frameHeight = nodeDetails.absoluteBoundingBox?.height;
+
+// Font properties for line count calculation
+const fontSize = nodeDetails.style?.fontSize;
+const lineHeightPx = nodeDetails.style?.lineHeightPx;
+const lineHeight = lineHeightPx || (fontSize * 1.2); // fallback
+
+// Approximate line count
+const lineCountHint = Math.floor(frameHeight / lineHeight);
+```
+
+**Implementation Spec Output:**
+
+For each TEXT node, add sizing properties to the component spec:
+
+```markdown
+| Property | Value |
+|----------|-------|
+| **Auto-Resize** | `HEIGHT` |
+| **Frame Dimensions** | `311 × 38` |
+| **Line Count Hint** | `2` (based on frameHeight / lineHeight) |
+```
+
+**Auto-Resize Values and SwiftUI Mapping:**
+
+| Figma Value | Behavior | SwiftUI |
+|-------------|----------|---------|
+| `NONE` | Fixed frame, text may clip | `.frame(width:height:).clipped()` |
+| `HEIGHT` | Width fixed, height adjusts | No `.lineLimit()` needed (default) |
+| `WIDTH_AND_HEIGHT` | Both adjust | No constraints needed |
+| `TRUNCATE` | Fixed frame, text truncated | `.lineLimit(N)` where N = lineCountHint |
+
+**Rules:**
+1. Always extract `textAutoResize` for TEXT nodes
+2. Always include `absoluteBoundingBox` width and height for text frames
+3. Calculate `lineCountHint` when `textAutoResize` is `HEIGHT` or `TRUNCATE`
+4. If `lineHeightPx` is not available, use `fontSize * 1.2` as fallback
+5. Add these properties to the component property table in the spec
 
 ### 4. Asset Requirements
 
