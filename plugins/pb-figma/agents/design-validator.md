@@ -134,6 +134,62 @@ if (isIconLibraryName) {
 **Warning condition:**
 If same node_id appears for multiple cards → likely a copy-paste error, verify manually
 
+#### 3.3 Fallback Icon Detection (REQUIRED)
+
+**Problem:** `figma_list_assets` may miss icons that are deeply nested, have non-standard names, or are component instances rather than direct vector nodes.
+
+**When to use:** After `figma_list_assets` completes, check if any card's leading icon is missing from the Assets Inventory.
+
+**Fallback Process:**
+
+1. **Identify missing icons:**
+   - For each card in the design, verify its leading icon has an entry in Assets Inventory
+   - If a card's icon node ID is NOT in the inventory → trigger fallback
+
+2. **Query parent frame children:**
+   ```typescript
+   // Get the card's children directly
+   const cardDetails = figma_get_node_details({
+     file_key: "{file_key}",
+     node_id: "{card_node_id}"
+   });
+
+   // Find the leading icon (usually first or second child, leftmost position)
+   const children = cardDetails.children;
+   const iconCandidate = children.find(child => {
+     const isSmall = child.absoluteBoundingBox.width <= 48
+                  && child.absoluteBoundingBox.height <= 48;
+     const isLeftmost = child.absoluteBoundingBox.x === Math.min(
+       ...children.map(c => c.absoluteBoundingBox.x)
+     );
+     return isSmall && isLeftmost;
+   });
+   ```
+
+3. **Query the candidate node directly:**
+   ```typescript
+   const iconDetails = figma_get_node_details({
+     file_key: "{file_key}",
+     node_id: iconCandidate.id
+   });
+   // Extract name, type, fills
+   ```
+
+4. **Add to Assets Inventory with [FALLBACK] tag:**
+   ```markdown
+   | Card 3 Icon | icon | 3:400 | lucide:trending-up | icon-trending-up.svg | [FALLBACK] |
+   ```
+
+**Size Heuristics for Icon Detection:**
+- Width AND height ≤ 48px → likely icon
+- Width AND height ≤ 16px → likely decorative/status icon
+- Has vector/boolean children → likely icon (not image)
+- Is INSTANCE type → check component name for icon keywords
+
+**DO NOT:**
+- Skip this step even if `figma_list_assets` returns results — always verify completeness
+- Assume all icons in a repeating pattern are identical without checking each node ID
+
 ### 3.5 Frame Properties Extraction
 
 **CRITICAL:** Extract frame properties for ALL container nodes (FRAME, COMPONENT, INSTANCE types).
