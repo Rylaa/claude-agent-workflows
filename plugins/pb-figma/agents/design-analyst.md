@@ -259,7 +259,38 @@ If no valid icon found at expected position:
 "none" → border: null
 ```
 
-**Example Component with Complete Dimensions:**
+### 1.6 Read Auto Layout Properties from Validation Report
+
+**Process:**
+1. Find component's Node ID in Validation Report "### Auto Layout Properties" table
+2. Extract: Layout Mode, Primary/Counter Axis, Padding, Spacing, Constraints, Min/Max
+3. Add to component's property table in spec
+
+**Mapping to SwiftUI:**
+
+| Auto Layout Property | SwiftUI Equivalent |
+|---------------------|--------------------|
+| HORIZONTAL | `HStack(spacing: {itemSpacing})` |
+| VERTICAL | `VStack(spacing: {itemSpacing})` |
+| primaryAxis: MIN | `.frame(maxWidth: .infinity, alignment: .leading)` |
+| primaryAxis: CENTER | `.frame(maxWidth: .infinity, alignment: .center)` |
+| primaryAxis: SPACE_BETWEEN | `Spacer()` between children |
+| counterAxis: CENTER | Default VStack/HStack alignment |
+| Padding T/R/B/L | `.padding(EdgeInsets(top:leading:bottom:trailing:))` |
+| constraints: STRETCH | `.frame(maxWidth: .infinity)` |
+| constraints: MIN | No width constraint (hug contents) |
+
+**Responsive Hints:**
+
+When a frame has `constraints.horizontal: STRETCH` AND no `maxWidth`:
+- Add to spec: `Responsive: content stretches to fill parent`
+- Code generator should use `.frame(maxWidth: .infinity)`
+
+When a frame has `maxWidth` set:
+- Add to spec: `Responsive: max width {maxWidth}pt`
+- Code generator should use `.frame(maxWidth: {maxWidth})`
+
+**Example Component with Complete Dimensions and Auto Layout:**
 
 ```markdown
 ### RoadmapCard
@@ -269,6 +300,9 @@ If no valid icon found at expected position:
 | **Element** | HStack |
 | **Layout** | horizontal, spacing: 16 |
 | **Dimensions** | `width: 358, height: 64` |  ← MUST include height
+| **Auto Layout** | `HORIZONTAL, primaryAxis: MIN, counterAxis: CENTER` |
+| **Padding** | `16/16/16/16` (T/R/B/L) |
+| **Constraints** | `horizontal: STRETCH, vertical: MIN` |
 | **Corner Radius** | `32px` |
 | **Border** | `1px #414141 inside` |
 | **Children** | IconFrame, TitleText, CheckmarkIcon |
