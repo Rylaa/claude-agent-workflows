@@ -127,16 +127,18 @@ For each asset in the "Assets Required" table, classify the asset type and use t
    })
    ```
 
-2. **Count vector children:**
-   ```
-   figma_find_children({
-     nodeId: "{node_id}",
-     query: { type: "VECTOR", recursive: true }
-   })
+2. **Analyze children from node details response:**
+   ```typescript
+   // From figma_get_node_details response:
+   const childrenCount = nodeDetails.children?.length ?? 0;
+   const hasVectorChildren = nodeDetails.children?.some(c => c.type === "VECTOR") ?? false;
+   const vectorChildCount = nodeDetails.children?.filter(c => c.type === "VECTOR").length ?? 0;
    ```
 
+   **Note:** The `figma_find_children` tool does not exist. Use `figma_get_node_details` which returns children array.
+
 3. **Classify based on criteria:**
-   - Count vector paths from children result
+   - Count vector children from `nodeDetails.children`
    - Check node dimensions (width, height)
    - Check for imageRef property
    - Apply classification table below
