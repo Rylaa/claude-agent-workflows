@@ -711,6 +711,72 @@ VStack(spacing: 16) {
 .padding(.bottom, 16)
 ```
 
+## Glass Effect (iOS 26+ Liquid Glass)
+
+When a component has `Glass Effect: true` in the spec, generate iOS 26 Liquid Glass code with backward-compatible fallback.
+
+**Detection:** Look for `| **Glass Effect** | true` and `| **Glass Tint** | {color} at {opacity} |` in the component's property table.
+
+**Button Pattern (most common):**
+
+```swift
+// For buttons with Glass Effect: true
+if #available(iOS 26.0, *) {
+    Button(action: { /* action */ }) {
+        Text("Save with Pro")
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(.white)
+    }
+    .buttonStyle(.glassProminent)
+    .tint(Color(hex: "#ffae96"))  // Glass Tint color from spec
+    .frame(width: 311, height: 48)
+    .clipShape(Capsule())
+} else {
+    // Fallback for iOS < 26
+    Button(action: { /* action */ }) {
+        Text("Save with Pro")
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(.white)
+    }
+    .frame(width: 311, height: 48)
+    .background(
+        .ultraThinMaterial,
+        in: Capsule()
+    )
+    .overlay(
+        Capsule()
+            .fill(Color(hex: "#ffae96").opacity(0.10))
+    )
+}
+```
+
+**Container Pattern (non-button glass):**
+
+```swift
+// For non-button containers with Glass Effect: true
+if #available(iOS 26.0, *) {
+    content
+        .glassEffect(.regular)
+        .tint(Color(hex: "{glass_tint_color}"))
+} else {
+    content
+        .background(.ultraThinMaterial)
+        .overlay(
+            RoundedRectangle(cornerRadius: {radius})
+                .fill(Color(hex: "{glass_tint_color}").opacity({glass_tint_opacity}))
+        )
+        .clipShape(RoundedRectangle(cornerRadius: {radius}))
+}
+```
+
+**Rules:**
+1. Always use `#available(iOS 26.0, *)` check — never use `@available` at struct level for this
+2. For buttons: use `.buttonStyle(.glassProminent)` with `.tint()` for the glass tint color
+3. For containers: use `.glassEffect(.regular)` with `.tint()`
+4. Fallback uses `.ultraThinMaterial` as background + overlay with the tint color at original opacity
+5. If corner radius >= height/2, use `Capsule()` instead of `RoundedRectangle`
+6. Glass Tint color comes from the spec's `Glass Tint` property
+
 ## Layer Order Parsing
 
 Read Layer Order from Implementation Spec to determine ZStack ordering.
