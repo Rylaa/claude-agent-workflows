@@ -17,7 +17,6 @@ tools:
 
 Load these references when needed:
 - Code Connect guide: `code-connect-guide.md` → Glob: `**/references/code-connect-guide.md`
-- Mapping planning prompt: `mapping-planning.md` → Glob: `**/references/prompts/mapping-planning.md`
 - Error recovery: `error-recovery.md` → Glob: `**/references/error-recovery.md`
 
 # Design Analyst Agent
