@@ -616,6 +616,14 @@ For each parent with clipContent: true in Figma:
 2. Verify edge-to-edge or overflowing children are inside clipped parent
 ```
 
+**iOS Version Guard Check:**
+```
+For each component using Glass Effect or other iOS 26+ APIs:
+1. Verify #available(iOS 26.0, *) guard wraps all iOS 26+ code
+2. Verify else branch provides a complete fallback
+3. Code without version guard using iOS 26+ APIs → automatic FAIL
+```
+
 ### 4. Document Visual Verification
 
 Add to Final Report:
