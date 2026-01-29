@@ -19,6 +19,8 @@ tools:
 Load these references when needed:
 - Token mapping: `token-mapping.md` → Glob: `**/references/token-mapping.md`
 - Common issues: `common-issues.md` → Glob: `**/references/common-issues.md`
+- Frame properties: `frame-properties.md` → Glob: `**/references/frame-properties.md`
+- SwiftUI patterns (Glass, Layer, Adaptive): `swiftui-patterns.md` → Glob: `**/references/swiftui-patterns.md`
 - Test generation: `test-generation.md` → Glob: `**/references/test-generation.md`
 - Error recovery: `error-recovery.md` → Glob: `**/references/error-recovery.md`
 
@@ -322,7 +324,7 @@ struct GrowthSectionView: View {
 
 ## Frame Properties Map
 
-> **Reference:** @skills/figma-to-code/references/frame-properties.md — Dimensions, corner radius, border, and stroke alignment mapping from Figma spec to SwiftUI modifiers.
+> **Reference:** Load `frame-properties.md` via `Glob("**/references/frame-properties.md")` for dimensions, corner radius, border/stroke alignment mapping, modifier ordering, and complete examples.
 
 Extract frame properties from each component to apply correct modifiers.
 
@@ -336,343 +338,22 @@ For each component in "## Components" section:
   Add to framePropertiesMap
 ```
 
-**Example framePropertiesMap:**
-```json
-{
-  "ChecklistItemView": {
-    "dimensions": { "width": 361, "height": 80 },
-    "cornerRadius": 12,
-    "border": { "width": 1, "color": "#FFFFFF", "opacity": 0.4, "align": "inside" }
-  },
-  "GrowthSectionView": {
-    "dimensions": { "width": 361, "height": 180 },
-    "cornerRadius": { "tl": 16, "tr": 16, "bl": 0, "br": 0 },
-    "border": null
-  }
-}
-```
-
 ### Step 2: Apply Frame Properties in SwiftUI
 
-**Dimensions → .frame() modifier:**
+**Quick Reference:**
 
-**When to use `width:` vs `maxWidth:`:**
+| Spec Property | SwiftUI Modifier | Notes |
+|--------------|------------------|-------|
+| Dimensions (fixed) | `.frame(width: X, height: Y)` | Exact size |
+| Dimensions (flexible) | `.frame(maxWidth: X)` | Responsive |
+| Corner Radius (uniform) | `.clipShape(RoundedRectangle(cornerRadius: X))` | Single value |
+| Corner Radius (per-corner) | `.clipShape(UnevenRoundedRectangle(...))` | iOS 16+ |
+| Border (inside) | `.overlay(RoundedRectangle().stroke())` | Default |
+| Border (outside) | `.padding(W/2)` then `.overlay()` | Extra padding |
 
-| Spec Context | SwiftUI Modifier | Use Case |
-|-------------|------------------|----------|
-| Fixed size component (card, button) | `.frame(width: 361, height: 80)` | Exact dimensions required |
-| Flexible container (fits screen) | `.frame(maxWidth: 361)` | Adapts to smaller screens |
-| Height-only constraint | `.frame(height: 80)` | Width determined by content |
-| Full-width with max | `.frame(maxWidth: .infinity)` | Expand to available space |
+**CRITICAL — Modifier Ordering:** `.padding()` → `.frame()` → `.background()` → `.clipShape()` → `.overlay()` → `.shadow()`
 
-**Decision rules:**
-
-1. **Use fixed `width:`** when component must be exact size (icons, badges, specific design constraints)
-2. **Use `maxWidth:`** when component should be responsive (screens narrower than design will shrink)
-3. **Combine both** for responsive with constraints: `.frame(minWidth: 200, maxWidth: 361)`
-
-```swift
-// Fixed size (exact match to Figma)
-.frame(width: 361, height: 80)
-
-// Flexible width (responsive)
-.frame(maxWidth: 361)
-.frame(height: 80)
-
-// Full-width card with max constraint
-.frame(maxWidth: .infinity)
-.frame(height: 80)
-
-// Responsive with minimum size
-.frame(minWidth: 280, maxWidth: 361, minHeight: 60, maxHeight: 80)
-```
-
-**Default recommendation:** Use fixed `width:` for components, use `maxWidth:` for screen-level containers.
-
-**Corner Radius → .clipShape() or .cornerRadius() modifier:**
-
-**Uniform radius:**
-```swift
-// From spec: Corner Radius: 12px
-.clipShape(RoundedRectangle(cornerRadius: 12))
-// OR
-.cornerRadius(12)
-```
-
-**Per-corner radius (iOS 16+):**
-```swift
-// From spec: Corner Radius: TL:16 TR:16 BL:0 BR:0
-.clipShape(
-  UnevenRoundedRectangle(
-    topLeadingRadius: 16,
-    bottomLeadingRadius: 0,
-    bottomTrailingRadius: 0,
-    topTrailingRadius: 16
-  )
-)
-```
-
-**Corner Radius Terminology Mapping:**
-
-Figma uses geometric corners (TopLeft, TopRight), SwiftUI uses reading direction (Leading, Trailing).
-Table order matches Swift's API signature:
-
-| Swift Parameter (in API order) | Figma/Spec | Position |
-|-------------------------------|------------|----------|
-| `topLeadingRadius` | TL (TopLeft) | Top-left corner |
-| `bottomLeadingRadius` | BL (BottomLeft) | Bottom-left corner |
-| `bottomTrailingRadius` | BR (BottomRight) | Bottom-right corner |
-| `topTrailingRadius` | TR (TopRight) | Top-right corner |
-
-**Example conversion:**
-```
-Spec: "TL:16 TR:16 BL:0 BR:0"
-↓
-UnevenRoundedRectangle(
-  topLeadingRadius: 16,     // TL=16
-  bottomLeadingRadius: 0,   // BL=0
-  bottomTrailingRadius: 0,  // BR=0
-  topTrailingRadius: 16     // TR=16
-)
-```
-
-**Per-corner radius (iOS 15 compatibility):**
-```swift
-// Use custom Shape for iOS 15 support
-.clipShape(RoundedCorner(radius: 16, corners: [.topLeft, .topRight]))
-```
-
-**Border → .overlay() with RoundedRectangle.stroke():**
-
-**Hex-Alpha Color Parsing:**
-
-The Color+Hex extension uses ARGB format for 8-character hex strings (alpha first):
-```
-#40FFFFFF → Alpha: 0x40 = 64/255 = 0.25 opacity, Color: #FFFFFF (white)
-#80FF0000 → Alpha: 0x80 = 128/255 = 0.50 opacity, Color: #FF0000 (red)
-#FF00FF00 → Alpha: 0xFF = 1.0 opacity, Color: #00FF00 (green)
-```
-
-**SwiftUI conversion:**
-```swift
-// For opacity < 1.0, use .opacity() modifier (more readable)
-Color(hex: "#FFFFFF").opacity(0.25)
-
-// Or use ARGB format with 8-char hex
-Color(hex: "#40FFFFFF")  // Extension parses as ARGB: alpha=0x40, RGB=FFFFFF
-```
-
-**Stroke Alignment Patterns:**
-
-| Figma Alignment | SwiftUI Pattern | Notes |
-|----------------|-----------------|-------|
-| INSIDE | `.overlay()` with stroke | Default, no adjustment needed |
-| OUTSIDE | `.padding()` then `.overlay()` | Add padding = strokeWidth/2 |
-| CENTER | `.overlay()` with inset | Stroke centered on edge |
-
-```swift
-// INSIDE stroke (default - stroke inside bounds)
-.overlay(
-  RoundedRectangle(cornerRadius: 12)
-    .stroke(Color.white.opacity(0.4), lineWidth: 1)
-)
-
-// OUTSIDE stroke (stroke outside bounds)
-.padding(1)  // Half of stroke width
-.overlay(
-  RoundedRectangle(cornerRadius: 12)
-    .stroke(Color.white.opacity(0.4), lineWidth: 2)
-)
-
-// CENTER stroke (stroke centered on edge)
-.overlay(
-  RoundedRectangle(cornerRadius: 12)
-    .inset(by: 0.5)  // Half of stroke width
-    .stroke(Color.white.opacity(0.4), lineWidth: 1)
-)
-```
-
-### Complete Example with Frame Properties
-
-**Implementation Spec Input:**
-
-```markdown
-## Components
-
-### ChecklistItemView
-
-| Property | Value |
-|----------|-------|
-| **Element** | HStack |
-| **Layout** | horizontal, spacing: 16 |
-| **Dimensions** | `width: 361, height: 80` |
-| **Corner Radius** | `12px` |
-| **Border** | `1px #FFFFFF opacity:0.4 inside` |
-| **Background** | `#150200` |
-| **Children** | IconFrame, ContentStack, CheckmarkIcon |
-| **Asset Children** | `IMAGE:icon-clock:3:230:32:32`, `IMAGE:checkmark:3:295:24:24` |
-
-### GrowthSectionView
-
-| Property | Value |
-|----------|-------|
-| **Element** | VStack |
-| **Layout** | vertical, spacing: 8 |
-| **Dimensions** | `width: 361, height: 180` |
-| **Corner Radius** | `TL:16 TR:16 BL:0 BR:0` |
-| **Border** | `none` |
-| **Children** | TitleText, ChartIllustration |
-| **Asset Children** | `IMAGE:growth-chart:6:32:354:132` |
-
-## Design Tokens
-
-### Colors
-
-> **Reference:** @skills/figma-to-code/references/color-extraction.md — Hex-to-SwiftUI color conversion, opacity handling, ARGB parsing, and design token color mapping.
-
-| Property | Color | Opacity | Usage |
-|----------|-------|---------|-------|
-| Border | #FFFFFF | 0.4 | `.stroke(Color.white.opacity(0.4))` |
-| Background | #150200 | 1.0 | `.background(Color(hex: "#150200"))` |
-| Title | #FFFFFF | 1.0 | `.foregroundColor(.white)` |
-| Subtitle | #CCCCCC | 0.6 | `.foregroundColor(Color(hex: "#CCCCCC").opacity(0.6))` |
-
-## Downloaded Assets
-
-| Asset | Local Path | Fill Type | Template Compatible |
-|-------|------------|-----------|---------------------|
-| icon-clock | Assets.xcassets/icon-clock.imageset | #F2F20D | No - use .original |
-| checkmark | Assets.xcassets/checkmark.imageset | none | Yes - use .template |
-| growth-chart | Assets.xcassets/growth-chart.imageset | N/A (PNG) | N/A |
-```
-
-**Generated SwiftUI Code:**
-
-```swift
-import SwiftUI
-
-struct ChecklistItemView: View {
-  let title: String
-  let subtitle: String
-  let isCompleted: Bool
-
-  var body: some View {
-    HStack(spacing: 16) {
-      // Asset: icon-clock (from Asset Children)
-      Image("icon-clock")
-        .resizable()
-        .renderingMode(.original)
-        .frame(width: 32, height: 32)
-
-      VStack(alignment: .leading, spacing: 4) {
-        Text(title)
-          .font(.headline)
-          .foregroundColor(.white)  // From Design Tokens
-
-        Text(subtitle)
-          .font(.subheadline)
-          .foregroundColor(Color(hex: "#CCCCCC").opacity(0.6))  // From Design Tokens
-      }
-
-      Spacer()
-
-      // Asset: checkmark (from Asset Children)
-      if isCompleted {
-        Image("checkmark")
-          .resizable()
-          .renderingMode(.template)
-          .foregroundColor(.viralYellow)
-          .frame(width: 24, height: 24)
-      }
-    }
-    .padding(.horizontal, 16)
-    .frame(width: 361, height: 80)  // From Dimensions
-    .background(Color(hex: "#150200"))  // From Design Tokens
-    .clipShape(RoundedRectangle(cornerRadius: 12))  // From Corner Radius
-    .overlay(
-      RoundedRectangle(cornerRadius: 12)
-        .stroke(Color.white.opacity(0.4), lineWidth: 1)  // From Border
-    )
-  }
-}
-
-struct GrowthSectionView: View {
-  var body: some View {
-    VStack(spacing: 8) {
-      Text("PROJECTED GROWTH")
-        .font(.caption)
-        .foregroundColor(.secondary)
-
-      // Asset: growth-chart (from Asset Children, ILLUSTRATION)
-      Image("growth-chart")
-        .resizable()
-        .aspectRatio(contentMode: .fit)
-        .frame(maxWidth: 354)
-        .clipped()
-    }
-    .frame(width: 361, height: 180)  // From Dimensions
-    .clipShape(  // From Corner Radius (per-corner)
-      UnevenRoundedRectangle(
-        topLeadingRadius: 16,
-        bottomLeadingRadius: 0,
-        bottomTrailingRadius: 0,
-        topTrailingRadius: 16
-      )
-    )
-  }
-}
-
-// MARK: - Required Extensions
-// See "Required Extensions" section for Color+Hex extension
-```
-
-**Key Points:**
-1. `Dimensions` → `.frame(width: 361, height: 80)`
-2. `Corner Radius` → `.clipShape(RoundedRectangle(cornerRadius: 12))` or `UnevenRoundedRectangle` for per-corner
-3. `Border` → `.overlay(RoundedRectangle().stroke())`
-4. `Design Tokens` → Copy Usage column directly
-5. `Asset Children` → `Image()` calls with correct renderingMode
-6. Include `Color+Hex` extension when using hex colors
-
-**CRITICAL - Modifier Ordering:**
-
-> **Reference:** @skills/figma-to-code/references/shadow-blur-effects.md — Shadow and blur effect extraction, modifier ordering, and SwiftUI shadow/blur code patterns.
-
-SwiftUI modifiers apply in order. The correct sequence for frame properties:
-
-```swift
-.padding()           // 1. Internal padding (affects content)
-.frame()             // 2. Size constraints
-.background()        // 3. Background color/gradient
-.clipShape()         // 4. Clip to shape (BEFORE overlay)
-.overlay()           // 5. Border stroke (AFTER clipShape)
-.shadow()            // 6. Shadow (outermost)
-```
-
-**Why this order matters:**
-
-| Wrong Order | Problem |
-|-------------|---------|
-| `.overlay()` before `.clipShape()` | Border gets clipped, corners cut off |
-| `.background()` after `.clipShape()` | Background bleeds outside rounded corners |
-| `.shadow()` before `.clipShape()` | Shadow shape doesn't match clipped shape |
-| `.frame()` after `.clipShape()` | Frame size may not match clipped content |
-
-**Example - Correct modifier chain:**
-```swift
-HStack(spacing: 16) {
-    // content
-}
-.padding(.horizontal, 16)        // 1. Internal padding
-.frame(width: 361, height: 80)   // 2. Size
-.background(Color(hex: "#150200")) // 3. Background
-.clipShape(RoundedRectangle(cornerRadius: 12)) // 4. Clip
-.overlay(                        // 5. Border
-    RoundedRectangle(cornerRadius: 12)
-        .stroke(Color.white.opacity(0.4), lineWidth: 1)
-)
-.shadow(color: .black.opacity(0.1), radius: 4, y: 2) // 6. Shadow
-```
+See `frame-properties.md` reference for full details, corner terminology mapping, hex-alpha parsing, and worked examples.
 
 ## Selective Padding (Edge-to-Edge Children)
 
@@ -727,120 +408,28 @@ VStack(spacing: 16) {
 
 ## Glass Effect (iOS 26+ Liquid Glass)
 
-When a component has `Glass Effect: true` in the spec, generate iOS 26 Liquid Glass code with backward-compatible fallback.
+> **Reference:** Load `swiftui-patterns.md` via `Glob("**/references/swiftui-patterns.md")` for full Glass Effect patterns (button + container), `#available` checks, fallback code, and rules.
 
-**Detection:** Look for `| **Glass Effect** | true` and `| **Glass Tint** | {color} at {opacity} |` in the component's property table.
+**Detection:** Look for `| **Glass Effect** | true` in component's property table.
 
-**Button Pattern (most common):**
+**Quick Reference:**
 
-```swift
-// For buttons with Glass Effect: true
-if #available(iOS 26.0, *) {
-    Button(action: { /* action */ }) {
-        Text("Save with Pro")
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(.white)
-    }
-    .buttonStyle(.glassProminent)
-    .tint(Color(hex: "#ffae96"))  // Glass Tint color from spec
-    .frame(width: 311, height: 48)
-    .clipShape(Capsule())
-} else {
-    // Fallback for iOS < 26
-    Button(action: { /* action */ }) {
-        Text("Save with Pro")
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(.white)
-    }
-    .frame(width: 311, height: 48)
-    .background(
-        .ultraThinMaterial,
-        in: Capsule()
-    )
-    .overlay(
-        Capsule()
-            .fill(Color(hex: "#ffae96").opacity(0.10))
-    )
-}
-```
+| Context | iOS 26+ | Fallback (< 26) |
+|---------|---------|------------------|
+| Button | `.buttonStyle(.glassProminent)` + `.tint()` | `.ultraThinMaterial` + overlay |
+| Container | `.glassEffect(.regular)` + `.tint()` | `.ultraThinMaterial` + overlay |
 
-**Container Pattern (non-button glass):**
-
-```swift
-// For non-button containers with Glass Effect: true
-if #available(iOS 26.0, *) {
-    content
-        .glassEffect(.regular)
-        .tint(Color(hex: "{glass_tint_color}"))
-} else {
-    content
-        .background(.ultraThinMaterial)
-        .overlay(
-            RoundedRectangle(cornerRadius: {radius})
-                .fill(Color(hex: "{glass_tint_color}").opacity({glass_tint_opacity}))
-        )
-        .clipShape(RoundedRectangle(cornerRadius: {radius}))
-}
-```
-
-**Rules:**
-1. Always use `#available(iOS 26.0, *)` check — never use `@available` at struct level for this
-2. For buttons: use `.buttonStyle(.glassProminent)` with `.tint()` for the glass tint color
-3. For containers: use `.glassEffect(.regular)` with `.tint()`
-4. Fallback uses `.ultraThinMaterial` as background + overlay with the tint color at original opacity
-5. If corner radius >= height/2, use `Capsule()` instead of `RoundedRectangle`
-6. Glass Tint color comes from the spec's `Glass Tint` property (produced by design-analyst when `fill.opacity <= 0.3 AND cornerRadius > 0`)
+Always use `#available(iOS 26.0, *)` check. If cornerRadius >= height/2, use `Capsule()`.
 
 ## Layer Order Parsing
 
-Read Layer Order from Implementation Spec to determine ZStack ordering.
+> **Reference:** Load `swiftui-patterns.md` via `Glob("**/references/swiftui-patterns.md")` for full Layer Order parsing, ZStack ordering, frame positioning, and position context mapping.
 
-**SwiftUI ZStack:** Last child renders on top (opposite of HTML/React)
-
-**Example spec:**
-```yaml
-layerOrder:
-  - layer: PageControl (zIndex: 900)
-  - layer: HeroImage (zIndex: 500)
-  - layer: ContinueButton (zIndex: 100)
-```
-
-**Generated SwiftUI order:**
-```swift
-// ZStack renders bottom-to-top (last = on top)
-ZStack(alignment: .top) {
-    ContinueButton()  // zIndex 100 - first = bottom
-    HeroImage()       // zIndex 500 - middle
-    PageControl()     // zIndex 900 - last = on top
-}
-```
-
-**CRITICAL:** Reverse zIndex sort for SwiftUI (lowest zIndex first in code)
-
-**Fallback:** If `layerOrder` is missing from spec, render components in the order they appear in spec components list (no reordering needed).
-
-### Frame Positioning
-
-When spec includes `absoluteY`, use `.offset()` for y-axis positioning:
-
-```swift
-// PageControl at absoluteY: 60
-PageControl()
-    .offset(y: 60)
-    .zIndex(900)
-
-// ContinueButton at absoluteY: 800
-ContinueButton()
-    .offset(y: 800)
-    .zIndex(100)
-```
-
-**Position context mapping:**
-- `position: top` → `.frame(maxHeight: .infinity, alignment: .top)`
-- `position: center` → `.frame(maxHeight: .infinity, alignment: .center)`
-- `position: bottom` → `.frame(maxHeight: .infinity, alignment: .bottom)`
-
-**Prefer alignment over absolute positioning** when possible (more responsive).
+**Quick Reference:**
+- **SwiftUI ZStack:** Last child renders on top (opposite of HTML/React)
+- **CRITICAL:** Reverse zIndex sort — lowest zIndex first in code
+- **Fallback:** If `layerOrder` missing, use spec components list order
+- **Positioning:** Prefer alignment (`.frame(alignment: .top)`) over `.offset()`
 
 ## Code Generation
 
@@ -1209,179 +798,30 @@ private var titleText: some View {
 
 ##### Apply Text Sizing from Spec
 
-**Read from Implementation Spec:**
+> **Reference:** Load `swiftui-patterns.md` via `Glob("**/references/swiftui-patterns.md")` for full Text Sizing rules with code examples for all Auto-Resize modes.
 
-Check for text sizing properties in each component's property table:
+**Quick Reference:**
 
-```markdown
-| Property | Value |
-|----------|-------|
-| **Auto-Resize** | `HEIGHT` |
-| **Frame Dimensions** | `311 × 38` |
-| **Line Count Hint** | `2` |
-```
-
-**SwiftUI Code Generation by Auto-Resize Mode:**
-
-**1. `HEIGHT` (width fixed, height adjusts):**
-```swift
-// Default behavior — no lineLimit needed
-Text("Description text that may wrap to multiple lines")
-    .font(.system(size: 14))
-    .foregroundColor(.white.opacity(0.7))
-// Do NOT add .lineLimit() — let text wrap naturally
-```
-
-**2. `TRUNCATE` (fixed frame, text truncated):**
-```swift
-Text("Text that should truncate if too long")
-    .font(.system(size: 14))
-    .foregroundColor(.white.opacity(0.7))
-    .lineLimit(2) // lineCountHint from spec
-    .truncationMode(.tail)
-```
-
-**3. `NONE` (fixed frame, text may clip):**
-```swift
-Text("Fixed frame text")
-    .font(.system(size: 14))
-    .foregroundColor(.white.opacity(0.7))
-    .frame(width: 311, height: 38) // exact frame dimensions from spec
-    .clipped()
-```
-
-**4. `WIDTH_AND_HEIGHT` (both dimensions adjust):**
-```swift
-// No constraints — text sizes to content
-Text("Auto-sizing text")
-    .font(.system(size: 14))
-    .foregroundColor(.white.opacity(0.7))
-    .fixedSize() // prevent truncation in both dimensions
-```
-
-**Rules:**
-1. If `Auto-Resize` is `HEIGHT` → do NOT add `.lineLimit()` (let text wrap freely)
-2. If `Auto-Resize` is `TRUNCATE` → add `.lineLimit(N)` using `Line Count Hint` value (default to `1` if not provided)
-3. If `Auto-Resize` is `NONE` → add `.frame(width:height:)` and `.clipped()`
-4. If `Auto-Resize` is `WIDTH_AND_HEIGHT` → add `.fixedSize()` (both axes)
-5. If no `Auto-Resize` property in spec → default to `HEIGHT` behavior (no lineLimit)
-6. When `Line Count Hint` > 1 and no explicit `Auto-Resize` → ensure no `.lineLimit(1)` is applied
-
-**Common mistakes:**
-
-❌ Adding `.lineLimit(1)` when Auto-Resize is `HEIGHT` → Text truncated unexpectedly
-✅ No `.lineLimit()` when Auto-Resize is `HEIGHT` → Text wraps naturally
-
-❌ Missing `.truncationMode(.tail)` with `.lineLimit()` → Default may vary
-✅ Always pair `.lineLimit(N)` with `.truncationMode(.tail)` for TRUNCATE mode
-
-❌ Using `.frame(maxHeight:)` for `NONE` mode → Text may overflow
-✅ Using `.frame(width:height:).clipped()` for `NONE` mode → Clean clipping
+| Auto-Resize Mode | SwiftUI Pattern |
+|-----------------|-----------------|
+| `HEIGHT` | No `.lineLimit()` — let text wrap |
+| `TRUNCATE` | `.lineLimit(N)` + `.truncationMode(.tail)` |
+| `NONE` | `.frame(width:height:)` + `.clipped()` |
+| `WIDTH_AND_HEIGHT` | `.fixedSize()` |
+| Not specified | Default to `HEIGHT` behavior |
 
 #### Adaptive Layout Patterns (iPad/Tablet Support)
 
-**Read from Implementation Spec:**
+> **Reference:** Load `swiftui-patterns.md` via `Glob("**/references/swiftui-patterns.md")` for full adaptive layout rules, width cap, card grid, safe defaults, and size class patterns.
 
-Check for Auto Layout and responsive properties in component specs:
+**Quick Reference — 4 Rules:**
 
-```markdown
-| Property | Value |
-|----------|-------|
-| **Auto Layout** | `VERTICAL, primaryAxis: MIN, counterAxis: CENTER` |
-| **Constraints** | `horizontal: STRETCH, vertical: MIN` |
-| **Responsive** | `content stretches to fill parent` |
-```
-
-**Rule 1 — Content Width Cap:**
-
-All top-level content containers (the outermost VStack/ScrollView) MUST include a width cap for iPad readability:
-
-```swift
-VStack(spacing: 16) {
-    // content
-}
-.frame(maxWidth: 600) // prevent over-stretching on iPad
-.frame(maxWidth: .infinity) // center within parent
-```
-
-**When to apply:**
-- The root container of ANY generated view
-- Only at the top level (not nested containers)
-
-**Rule 2 — Card Lists with 3+ Items:**
-
-When a VStack contains 3 or more card-like children with identical structure (same component type repeated), use adaptive grid:
-
-```swift
-private let columns = [GridItem(.adaptive(minimum: 280, maximum: 400))]
-
-var body: some View {
-    LazyVGrid(columns: columns, spacing: 16) {
-        ForEach(items) { item in
-            CardView(item: item)
-        }
-    }
-}
-```
-
-**When to apply:**
-- Spec shows a repeating card pattern (ForEach over items)
-- 3+ items with identical structure
-- NOT for 1-2 items (keep VStack)
-
-**Rule 3 — Safe Layout Defaults:**
-
-ALWAYS follow these defaults in generated code:
-
-```swift
-// ✅ DO: Use flexible widths
-.frame(maxWidth: .infinity)
-
-// ❌ DON'T: Use screen-dependent widths
-.frame(width: UIScreen.main.bounds.width)
-.frame(width: 393) // hardcoded iPhone width
-
-// ✅ DO: Use horizontal padding for edge spacing
-.padding(.horizontal, 16)
-
-// ❌ DON'T: Calculate padding from screen width
-.padding(.horizontal, (UIScreen.main.bounds.width - 361) / 2)
-```
-
-**Rule 4 — Size Class (Optional, for complex layouts):**
-
-Only use when the spec explicitly mentions different tablet layout OR the design has major structural differences for wider screens:
-
-```swift
-@Environment(\.horizontalSizeClass) var horizontalSizeClass
-
-var body: some View {
-    if horizontalSizeClass == .regular {
-        // iPad: side-by-side layout
-        HStack(spacing: 24) {
-            leftContent
-            rightContent
-        }
-    } else {
-        // iPhone: stacked layout
-        VStack(spacing: 16) {
-            leftContent
-            rightContent
-        }
-    }
-}
-```
-
-**Common mistakes:**
-
-❌ Hardcoding `UIScreen.main.bounds.width` → Breaks on iPad and landscape
-✅ Using `.frame(maxWidth: .infinity)` → Works on all screen sizes
-
-❌ Missing maxWidth cap on root container → Content stretches too wide on iPad
-✅ `.frame(maxWidth: 600).frame(maxWidth: .infinity)` → Capped and centered
-
-❌ Using VStack for 5+ repeating cards → Wasted horizontal space on iPad
-✅ Using `LazyVGrid(.adaptive(...))` → Auto-adjusts columns by screen width
+| Rule | When | Pattern |
+|------|------|---------|
+| Width Cap | Root containers | `.frame(maxWidth: 600).frame(maxWidth: .infinity)` |
+| Card Grid | 3+ repeating cards | `LazyVGrid(.adaptive(minimum: 280, maximum: 400))` |
+| Safe Defaults | Always | `.frame(maxWidth: .infinity)` — never hardcode screen width |
+| Size Class | Complex tablet layouts | `@Environment(\.horizontalSizeClass)` |
 
 ##### Use Proper View Structure
 
@@ -1697,66 +1137,9 @@ struct CardView_Previews: PreviewProvider {
 
 ## Required Extensions
 
-When generating SwiftUI code, include these helper extensions if needed.
+> **Reference:** Load `swiftui-patterns.md` via `Glob("**/references/swiftui-patterns.md")` for full extension code (Color+Hex, RoundedCorner).
 
-### Color+Hex Extension
-
-> **Reference:** @skills/figma-to-code/references/font-handling.md — Font weight mapping, system font sizing, and typography token conversion from Figma to SwiftUI.
-
-If any generated code uses `Color(hex:)`, include this extension:
-
-```swift
-extension Color {
-  init(hex: String) {
-    let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-    var int: UInt64 = 0
-    Scanner(string: hex).scanHexInt64(&int)
-    let a, r, g, b: UInt64
-    switch hex.count {
-    case 3: // RGB (12-bit)
-      (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-    case 6: // RGB (24-bit)
-      (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-    case 8: // ARGB (32-bit)
-      (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-    default:
-      (a, r, g, b) = (255, 0, 0, 0)
-    }
-    self.init(
-      .sRGB,
-      red: Double(r) / 255,
-      green: Double(g) / 255,
-      blue: Double(b) / 255,
-      opacity: Double(a) / 255
-    )
-  }
-}
-```
-
-### RoundedCorner Shape (iOS 15 Compatible)
-
-If spec has per-corner radius and project targets iOS 15, include this shape:
-
-```swift
-struct RoundedCorner: Shape {
-  var radius: CGFloat = .infinity
-  var corners: UIRectCorner = .allCorners
-
-  func path(in rect: CGRect) -> Path {
-    let path = UIBezierPath(
-      roundedRect: rect,
-      byRoundingCorners: corners,
-      cornerRadii: CGSize(width: radius, height: radius)
-    )
-    return Path(path.cgPath)
-  }
-}
-
-// Usage:
-.clipShape(RoundedCorner(radius: 16, corners: [.topLeft, .topRight]))
-```
-
-### When to Include Extensions
+**Quick Reference:**
 
 | Extension | Include When |
 |-----------|--------------|

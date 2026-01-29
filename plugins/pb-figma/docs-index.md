@@ -57,6 +57,8 @@
 | Layer Order & Hierarchy | @skills/figma-to-code/references/layer-order-hierarchy.md | design-analyst, code-generator-* |
 | Accessibility Patterns | @skills/figma-to-code/references/accessibility-patterns.md | code-generator-*, compliance-checker |
 | Responsive Patterns | @skills/figma-to-code/references/responsive-patterns.md | code-generator-*, compliance-checker |
+| React Patterns (CVA, Utilities) | @skills/figma-to-code/references/react-patterns.md | code-generator-react |
+| SwiftUI Patterns (Glass, Layer, Adaptive) | @skills/figma-to-code/references/swiftui-patterns.md | code-generator-swiftui |
 
 ### Development References
 | Topic | Path | Used By |

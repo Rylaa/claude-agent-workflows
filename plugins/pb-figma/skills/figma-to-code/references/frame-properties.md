@@ -347,3 +347,44 @@ HStack(spacing: 16) {
         .stroke(Color.white.opacity(0.4), lineWidth: 1)
 )
 ```
+
+---
+
+## SwiftUI Modifier Ordering
+
+SwiftUI modifiers apply in order. The correct sequence for frame properties:
+
+```swift
+.padding()           // 1. Internal padding (affects content)
+.frame()             // 2. Size constraints
+.background()        // 3. Background color/gradient
+.clipShape()         // 4. Clip to shape (BEFORE overlay)
+.overlay()           // 5. Border stroke (AFTER clipShape)
+.shadow()            // 6. Shadow (outermost)
+```
+
+**Why order matters:**
+
+| Wrong Order | Problem |
+|-------------|---------|
+| `.overlay()` before `.clipShape()` | Border gets clipped, corners cut off |
+| `.background()` after `.clipShape()` | Background bleeds outside rounded corners |
+| `.shadow()` before `.clipShape()` | Shadow shape doesn't match clipped shape |
+| `.frame()` after `.clipShape()` | Frame size may not match clipped content |
+
+**Example — Correct modifier chain:**
+
+```swift
+HStack(spacing: 16) {
+    // content
+}
+.padding(.horizontal, 16)        // 1. Internal padding
+.frame(width: 361, height: 80)   // 2. Size
+.background(Color(hex: "#150200")) // 3. Background
+.clipShape(RoundedRectangle(cornerRadius: 12)) // 4. Clip
+.overlay(                        // 5. Border
+    RoundedRectangle(cornerRadius: 12)
+        .stroke(Color.white.opacity(0.4), lineWidth: 1)
+)
+.shadow(color: .black.opacity(0.1), radius: 4, y: 2) // 6. Shadow
+```
