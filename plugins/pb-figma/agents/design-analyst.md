@@ -290,6 +290,35 @@ When a frame has `maxWidth` set:
 - Add to spec: `Responsive: max width {maxWidth}pt`
 - Code generator should use `.frame(maxWidth: {maxWidth})`
 
+**Edge-to-Edge Child Detection:**
+
+When analyzing a parent with auto-layout padding, compare each child's width to the parent's width:
+
+```
+IF child.width >= parent.width (within ±4px tolerance):
+  → Child IGNORES parent padding → Mark as "Edge-to-Edge: true"
+  → Add to spec: `| **Edge-to-Edge** | true — this child extends full parent width, ignoring horizontal padding |`
+
+IF child.width > parent.width:
+  → Child OVERFLOWS parent → Mark as "Edge-to-Edge: true" + "Overflow: clipped"
+  → Parent must have clipContent: true for this to work
+  → Add to spec: `| **Edge-to-Edge** | true — overflows parent, clipped |`
+```
+
+**Example:**
+```markdown
+### ImageSection
+
+| Property | Value |
+|----------|-------|
+| **Element** | ZStack |
+| **Dimensions** | `width: 343, height: 148` |
+| **Edge-to-Edge** | true — this child extends full parent width, ignoring horizontal padding |
+| **Children** | BackgroundImage, GradientOverlay |
+```
+
+When Edge-to-Edge is true, the code generator must NOT apply the parent's horizontal padding to this child. Instead, the parent should apply padding individually to non-edge-to-edge children only.
+
 **Example Component with Complete Dimensions and Auto Layout:**
 
 ```markdown
