@@ -319,6 +319,33 @@ IF child.width > parent.width:
 
 When Edge-to-Edge is true, the code generator must NOT apply the parent's horizontal padding to this child. Instead, the parent should apply padding individually to non-edge-to-edge children only.
 
+**Glass/Translucent Effect Detection:**
+
+When a component has a fill with opacity ≤ 0.3 AND has a corner radius, it likely represents a glass/frosted-glass button or container. Detect and annotate:
+
+```
+IF fill.opacity <= 0.3 AND fill.opacity > 0 AND cornerRadius > 0:
+  → Mark as "Glass Effect: true"
+  → Add to spec: `| **Glass Effect** | true — low-opacity fill suggests frosted glass appearance |`
+  → Add to spec: `| **Glass Tint** | {fill.color} at {fill.opacity} opacity |`
+```
+
+**Example:**
+```markdown
+### SaveButton
+
+| Property | Value |
+|----------|-------|
+| **Element** | Button |
+| **Dimensions** | `width: 311, height: 48` |
+| **Corner Radius** | `32px` |
+| **Glass Effect** | true — low-opacity fill suggests frosted glass appearance |
+| **Glass Tint** | #ffae96 at 0.10 opacity |
+| **Children** | ButtonLabel |
+```
+
+The code generator should use iOS 26+ `.glassEffect()` with backward-compatible fallback for this pattern.
+
 **Example Component with Complete Dimensions and Auto Layout:**
 
 ```markdown
