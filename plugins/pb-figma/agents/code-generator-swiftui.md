@@ -14,11 +14,13 @@ tools:
 
 ## Reference Loading
 
+**How to load references:** Use `Glob("**/references/{filename}.md")` to find the absolute path, then `Read()` the result. Do NOT use `@skills/...` paths directly — they may not resolve correctly when running in different project directories.
+
 Load these references when needed:
-- Token mapping: @skills/figma-to-code/references/token-mapping.md
-- Common issues: @skills/figma-to-code/references/common-issues.md
-- Test generation: @skills/figma-to-code/references/test-generation.md
-- Error recovery: @skills/figma-to-code/references/error-recovery.md
+- Token mapping: `token-mapping.md` → Glob: `**/references/token-mapping.md`
+- Common issues: `common-issues.md` → Glob: `**/references/common-issues.md`
+- Test generation: `test-generation.md` → Glob: `**/references/test-generation.md`
+- Error recovery: `error-recovery.md` → Glob: `**/references/error-recovery.md`
 
 # SwiftUI Code Generator Agent
 
@@ -951,7 +953,7 @@ Color.primary
 
 ##### Apply Opacity from Spec
 
-See: @skills/figma-to-code/references/opacity-extraction.md for calculation details.
+See reference: `opacity-extraction.md` (Glob: `**/references/opacity-extraction.md`) for calculation details.
 
 **Copy Usage column from Design Tokens table** - it contains the complete SwiftUI modifier chain.
 
