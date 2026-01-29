@@ -1,5 +1,6 @@
 ---
 name: asset-manager
+model: sonnet
 description: Downloads and organizes assets from Figma based on Implementation Spec. Validates downloaded assets, organizes them in project structure, and updates the spec with final asset paths.
 tools:
   - Read

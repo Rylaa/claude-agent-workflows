@@ -1,5 +1,6 @@
 ---
 name: font-manager
+model: haiku
 description: >
   Detects fonts from Figma designs, downloads from multiple sources (Google Fonts,
   Adobe Fonts, Font Squirrel), and sets them up according to the target platform.
