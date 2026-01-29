@@ -14,12 +14,14 @@ tools:
 
 ## Reference Loading
 
+**How to load references:** Use `Glob("**/references/{filename}.md")` to find the absolute path, then `Read()` the result. Do NOT use `@skills/...` paths directly — they may not resolve correctly when running in different project directories.
+
 Load these references when needed:
-- Visual validation loop: @skills/figma-to-code/references/visual-validation-loop.md
-- QA report template: @skills/figma-to-code/references/qa-report-template.md
-- Responsive validation: @skills/figma-to-code/references/responsive-validation.md
-- Accessibility validation: @skills/figma-to-code/references/accessibility-validation.md
-- Error recovery: @skills/figma-to-code/references/error-recovery.md
+- Visual validation loop: `visual-validation-loop.md` → Glob: `**/references/visual-validation-loop.md`
+- QA report template: `qa-report-template.md` → Glob: `**/references/qa-report-template.md`
+- Responsive validation: `responsive-validation.md` → Glob: `**/references/responsive-validation.md`
+- Accessibility validation: `accessibility-validation.md` → Glob: `**/references/accessibility-validation.md`
+- Error recovery: `error-recovery.md` → Glob: `**/references/error-recovery.md`
 
 # Compliance Checker Agent
 
@@ -232,7 +234,7 @@ Bash("npx tsc --noEmit {component_file_path}")
 
 ### 6. Layer Order Validation
 
-See: @skills/figma-to-code/references/layer-order-hierarchy.md
+See reference: `layer-order-hierarchy.md` (Glob: `**/references/layer-order-hierarchy.md`)
 
 **Key rule:** Use children array order, not Y coordinate.
 
@@ -679,7 +681,7 @@ Add to Final Report:
 
 **Visual Diff Report Format:**
 
-> See [`references/visual-diff-template.md`](../skills/figma-to-code/references/visual-diff-template.md) for the full report template, example diffs, and formatting rules.
+> See reference: `visual-diff-template.md` (Glob: `**/references/visual-diff-template.md`) for the full report template, example diffs, and formatting rules.
 
 **Severity Levels:**
 - **HIGH:** Visually obvious difference (wrong color, missing element, wrong icon)
