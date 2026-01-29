@@ -19,6 +19,9 @@ tools:
 Load these references when needed:
 - Token mapping: `token-mapping.md` → Glob: `**/references/token-mapping.md`
 - Common issues: `common-issues.md` → Glob: `**/references/common-issues.md`
+- Frame properties: `frame-properties.md` → Glob: `**/references/frame-properties.md`
+- Text decoration: `text-decoration.md` → Glob: `**/references/text-decoration.md`
+- Gradient handling: `gradient-handling.md` → Glob: `**/references/gradient-handling.md`
 - Test generation: `test-generation.md` → Glob: `**/references/test-generation.md`
 - Storybook integration: `storybook-integration.md` → Glob: `**/references/storybook-integration.md`
 - Error recovery: `error-recovery.md` → Glob: `**/references/error-recovery.md`
@@ -188,200 +191,19 @@ import ClockIcon from '@/assets/icons/clock.svg';
 | SVG component | Custom icons needing color control |
 | img tag | Simple icons without color control |
 
-## Frame Properties Map
+## Frame Properties Mapping
 
-> **Reference:** @skills/figma-to-code/references/frame-properties.md — Detailed dimension, corner radius, and border extraction rules with Tailwind mapping.
+> **Reference:** Load `frame-properties.md` via `Glob("**/references/frame-properties.md")` for dimension extraction, corner radius (uniform/per-corner), border/stroke handling, and Tailwind mapping rules.
 
-**CRITICAL:** Extract frame properties from each component to apply correct Tailwind classes.
+### Quick Reference (React/Tailwind)
 
-### Step 1: Parse Frame Properties from Spec
-
-```
-For each component in "## Components" section:
-  Read "Dimensions" property → { width, height }
-  Read "Corner Radius" property → number or { tl, tr, bl, br }
-  Read "Border" property → { width, color, opacity, align } or null
-  Add to framePropertiesMap
-```
-
-**Example framePropertiesMap:**
-```json
-{
-  "Card": {
-    "dimensions": { "width": 361, "height": 80 },
-    "cornerRadius": 12,
-    "border": { "width": 1, "color": "#FFFFFF", "opacity": 0.4, "align": "inside" }
-  },
-  "Header": {
-    "dimensions": { "width": 361, "height": 180 },
-    "cornerRadius": { "tl": 16, "tr": 16, "bl": 0, "br": 0 },
-    "border": null
-  }
-}
-```
-
-### Step 2: Apply Frame Properties in Tailwind
-
-**Dimensions → Tailwind width/height classes:**
-
-| Spec Context | Tailwind Class | Use Case |
-|--------------|----------------|----------|
-| Fixed size (card, button) | `w-[361px] h-[80px]` | Exact Figma dimensions |
-| Flexible container | `max-w-[361px]` | Responsive, shrinks on mobile |
-| Full width with max | `w-full max-w-[361px]` | Fills container up to max |
-| Height only | `h-[80px]` | Width determined by content |
-
-**When to use fixed vs flexible:**
-
-1. **Use fixed `w-[Xpx]`:** Icons, badges, exact design requirements
-2. **Use `max-w-[Xpx]`:** Cards, containers that should be responsive
-3. **Combine for responsive:** `w-full max-w-[361px]` for mobile-first
-
-```tsx
-// Fixed size (exact match to Figma)
-<div className="w-[361px] h-[80px]">
-
-// Flexible width (responsive)
-<div className="w-full max-w-[361px] h-[80px]">
-
-// Full-width card with max constraint
-<div className="w-full max-w-sm h-auto">
-```
-
-**Corner Radius → Tailwind rounded classes:**
-
-**Uniform radius:**
-```tsx
-// Corner Radius: 12px → Tailwind
-<div className="rounded-xl">  // 12px = rounded-xl
-// OR arbitrary value
-<div className="rounded-[12px]">
-```
-
-**Per-corner radius:**
-```tsx
-// Corner Radius: TL:16 TR:16 BL:0 BR:0
-<div className="rounded-tl-2xl rounded-tr-2xl rounded-bl-none rounded-br-none">
-// OR shorthand
-<div className="rounded-t-2xl rounded-b-none">
-```
-
-**Tailwind radius reference:**
-
-| Figma Value | Tailwind Class | CSS Value |
-|-------------|----------------|-----------|
-| 0 | `rounded-none` | 0px |
-| 2px | `rounded-sm` | 0.125rem |
-| 4px | `rounded` | 0.25rem |
-| 6px | `rounded-md` | 0.375rem |
-| 8px | `rounded-lg` | 0.5rem |
-| 12px | `rounded-xl` | 0.75rem |
-| 16px | `rounded-2xl` | 1rem |
-| 24px | `rounded-3xl` | 1.5rem |
-| 9999px | `rounded-full` | 9999px |
-
-**Border → Tailwind border classes:**
-
-**Basic border:**
-```tsx
-// Border: 1px solid with color
-<div className="border border-white/40">  // opacity via Tailwind
-// OR with CSS variable
-<div className="border border-[var(--border-color)]">
-```
-
-**Border with specific width:**
-```tsx
-// Border: 2px
-<div className="border-2 border-primary">
-
-// Border: 1px only on bottom
-<div className="border-b border-gray-200">
-```
-
-**Hex-Alpha Color Parsing:**
-
-When spec shows `#RRGGBBAA` format:
-```
-#FFFFFF40 → Color: #FFFFFF, Alpha: 0x40 = 64/255 ≈ 0.25 opacity
-```
-
-**Tailwind conversion:**
-```tsx
-// Using Tailwind opacity modifier
-<div className="border border-white/25">
-
-// Using CSS variable with opacity
-<div className="border border-[rgba(255,255,255,0.25)]">
-
-// Using arbitrary value
-<div className="border border-[#FFFFFF40]">
-```
-
-### Complete Example with Frame Properties
-
-**Implementation Spec Input:**
-
-```markdown
-## Components
-
-### Card
-
-| Property | Value |
-|----------|-------|
-| **Element** | article |
-| **Layout** | flex flex-row gap-4 |
-| **Dimensions** | `width: 361, height: 80` |
-| **Corner Radius** | `12px` |
-| **Border** | `1px #FFFFFF opacity:0.4 inside` |
-| **Background** | `#150200` |
-```
-
-**Generated React Code:**
-
-```tsx
-interface CardProps {
-  title: string;
-  subtitle?: string;
-  className?: string;
-}
-
-export const Card: React.FC<CardProps> = ({ title, subtitle, className }) => {
-  return (
-    <article
-      className={cn(
-        // Layout from spec
-        "flex flex-row gap-4",
-        // Dimensions from Frame Properties
-        "w-[361px] h-[80px]",
-        // Background
-        "bg-[#150200]",
-        // Corner Radius
-        "rounded-xl",
-        // Border (1px white with 40% opacity)
-        "border border-white/40",
-        // Padding
-        "px-4",
-        className
-      )}
-    >
-      <div className="flex flex-col justify-center">
-        <h3 className="text-white font-semibold">{title}</h3>
-        {subtitle && (
-          <p className="text-gray-400 text-sm">{subtitle}</p>
-        )}
-      </div>
-    </article>
-  );
-};
-```
-
-**Key Points:**
-1. `Dimensions` → `w-[361px] h-[80px]`
-2. `Corner Radius` → `rounded-xl` (12px)
-3. `Border` → `border border-white/40`
-4. `Background` → `bg-[#150200]`
-5. Use `cn()` utility for class merging
+| Figma Property | Tailwind/CSS |
+|---------------|-------------|
+| cornerRadius (uniform) | `rounded-{size}` |
+| cornerRadius (per-corner) | `rounded-tl-{} rounded-tr-{} rounded-br-{} rounded-bl-{}` |
+| strokeWeight + strokeAlign INSIDE | `border-{width}` + `box-border` |
+| strokeWeight + strokeAlign OUTSIDE | `outline outline-{width}` or wrapper `div` |
+| strokeWeight + strokeAlign CENTER | `border-{width}` (visual approximation) |
 
 ## Framework Detection
 
@@ -573,88 +395,27 @@ Replace hardcoded values with CSS custom properties or Tailwind tokens from the 
 
 ##### Apply Gradients from Spec
 
-Read gradient from Implementation Spec "Text with Gradient" or "Background Gradient" section and map to CSS/Tailwind.
+> **Reference:** Load `gradient-handling.md` via `Glob("**/references/gradient-handling.md")` for gradient type detection, stop position precision (4 decimal), and CSS/Tailwind gradient syntax.
 
-> **Reference:** @skills/figma-to-code/references/gradient-handling.md — Gradient types, CSS/Tailwind mapping, angle conversion, and code examples.
+### Quick Reference (React/Tailwind)
 
-**Workflow:**
-1. Read gradient type and all stops from Implementation Spec
-2. Map Figma gradient type to CSS function (`linear-gradient`, `radial-gradient`, `conic-gradient`)
-3. Convert stop positions from decimal to percentage (0.1673 -> 16.73%)
-4. For text gradients, use `bg-clip-text text-transparent` pattern
-5. Prefer Tailwind utilities for simple gradients (2-3 colors, standard angles); use style prop for complex ones (4+ colors, precise positions)
+| Gradient Type | CSS Pattern |
+|--------------|-------------|
+| LINEAR | `bg-gradient-to-{dir}` or `background: linear-gradient({angle}deg, ...)` |
+| RADIAL | `background: radial-gradient(...)` |
+| Multiple stops | Use `from-{color} via-{color} to-{color}` for 3-stop, CSS for complex |
 
 ##### Apply Text Decoration from Spec
 
-> **Reference:** @skills/figma-to-code/references/text-decoration.md — Underline, strikethrough, and decoration color/thickness Tailwind patterns.
+> **Reference:** Load `text-decoration.md` via `Glob("**/references/text-decoration.md")` for underline/strikethrough mapping, inline text variations, and character style override handling.
 
-Read text decoration from the **"Text Decoration"** section of Implementation Spec.
+### Quick Reference (React/Tailwind)
 
-**Input format (Implementation Spec):**
-
-```markdown
-### Text Decoration
-
-**Component:** HookText
-- **Decoration:** Underline | Strikethrough
-- **Color:** #ffd100 (opacity: 1.0)
-- **Thickness:** 1.0
-
-**Tailwind Mapping:** `underline decoration-[#ffd100]`
-```
-
-**Tailwind patterns:**
-
-```tsx
-// Underline with custom color
-<span className="underline decoration-[#ffd100]">
-  Underlined Text
-</span>
-
-// Strikethrough with color
-<span className="line-through decoration-[#ff0000]/80">
-  Strikethrough Text
-</span>
-
-// Combined with other text styles
-<span className="text-lg font-semibold underline decoration-primary decoration-2">
-  Styled Underline
-</span>
-```
-
-**Decoration properties:**
-
-| Property | Tailwind Class | Example |
-|----------|----------------|---------|
-| Underline | `underline` | `underline` |
-| Strikethrough | `line-through` | `line-through` |
-| Color | `decoration-{color}` | `decoration-red-500` |
-| Arbitrary color | `decoration-[#hex]` | `decoration-[#ffd100]` |
-| Thickness | `decoration-{n}` | `decoration-2` |
-| Opacity | `decoration-{color}/{opacity}` | `decoration-red-500/50` |
-
-**CSS fallback for older browsers:**
-
-```tsx
-// Style prop for exact control
-<span
-  style={{
-    textDecoration: 'underline',
-    textDecorationColor: '#ffd100',
-    textDecorationThickness: '2px'
-  }}
->
-  Underlined
-</span>
-```
-
-**Common mistakes:**
-
-❌ `text-decoration: underline #ffd100` → Invalid shorthand
-✅ `underline decoration-[#ffd100]` → Tailwind pattern
-
-❌ Missing decoration color when spec has it → Wrong color
-✅ Copy exact color from spec → `decoration-[#ffd100]`
+| Figma textDecoration | Tailwind Class |
+|---------------------|---------------|
+| UNDERLINE | `underline` |
+| STRIKETHROUGH | `line-through` |
+| UNDERLINE + STRIKETHROUGH | `underline line-through` |
 
 ##### Add Semantic HTML
 
