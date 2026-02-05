@@ -714,6 +714,7 @@ If the Implementation Spec has no "Assets Required" section:
 Before completing, verify:
 
 - [ ] All assets from "Assets Required" table processed
+- [ ] If "Flagged for LLM Review" exists, "Flagged Frame Decisions" table added with matching entries
 - [ ] Files exist in correct directories (`public/assets/icons/`, `public/assets/images/`)
 - [ ] Downloaded Assets table added to spec
 - [ ] Asset Import Statements section added
