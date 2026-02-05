@@ -22,3 +22,4 @@ __pycache__/
 .env.local
 docs
 docs
+packages/pixelbyte-figma-mcp.OLD/

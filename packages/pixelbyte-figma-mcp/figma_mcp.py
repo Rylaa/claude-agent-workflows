@@ -28,6 +28,17 @@ import httpx
 from pydantic import BaseModel, Field, field_validator, ConfigDict, BeforeValidator
 from mcp.server.fastmcp import FastMCP
 
+# Generator modules
+from generators.react_generator import generate_react_code as _generate_react_code
+from generators.vue_generator import generate_vue_code as _generate_vue_code
+from generators.css_generator import generate_css_code as _generate_css_code, generate_scss_code as _generate_scss_code
+from generators.kotlin_generator import generate_kotlin_code as _generate_kotlin_code
+from generators.base import (
+    sanitize_component_name as _sanitize_component_name,
+    MAX_CHILDREN_LIMIT,
+    MAX_NATIVE_CHILDREN_LIMIT,
+)
+
 
 # ============================================================================
 # Reusable Validators (Annotated Types)
@@ -69,7 +80,7 @@ FigmaNodeIdList = Annotated[List[str], BeforeValidator(_normalize_node_ids)]
 # ============================================================================
 
 FIGMA_API_BASE = "https://api.figma.com/v1"
-CHARACTER_LIMIT = 25000
+CHARACTER_LIMIT = 80000
 DEFAULT_TIMEOUT = 30.0
 
 # Retry configuration for network errors
@@ -123,14 +134,12 @@ TAILWIND_ALIGN_MAP = {
     'JUSTIFIED': 'text-justify'
 }
 
-# Max children limit for recursive operations
-MAX_CHILDREN_LIMIT = 20
-MAX_NATIVE_CHILDREN_LIMIT = 10  # Limit for SwiftUI/Kotlin to avoid excessive code
-
 
 # ============================================================================
 # Initialize MCP Server
 # ============================================================================
+
+SERVER_VERSION = "3.2.15"
 
 mcp = FastMCP("figma_mcp")
 
@@ -210,6 +219,10 @@ class FigmaNodeInput(BaseModel):
 
     file_key: FigmaFileKey = Field(..., description="Figma file key")
     node_id: FigmaNodeId = Field(..., description="Node ID (e.g., '1:2' or '1-2')")
+    framework: Optional[str] = Field(
+        default=None,
+        description="Target framework for implementation hints: 'css', 'swiftui', 'kotlin'. If not provided, defaults to 'css'."
+    )
     response_format: ResponseFormat = Field(
         default=ResponseFormat.MARKDOWN,
         description="Output format"
@@ -518,6 +531,27 @@ async def _make_figma_request(
     raise last_exception
 
 
+def _with_version(response: str) -> str:
+    """Append server version footer to tool responses."""
+    return f"{response}\n\n---\n_MCP Server v{SERVER_VERSION}_"
+
+
+def _versioned_tool(*args, **kwargs):
+    """Decorator that wraps mcp.tool() and appends server version to responses."""
+    def decorator(func):
+        import functools
+
+        @functools.wraps(func)
+        async def wrapper(*fn_args, **fn_kwargs):
+            result = await func(*fn_args, **fn_kwargs)
+            if isinstance(result, str):
+                return _with_version(result)
+            return result
+
+        return mcp.tool(*args, **kwargs)(wrapper)
+    return decorator
+
+
 def _handle_api_error(e: Exception) -> str:
     """Format API errors for user-friendly messages."""
     if isinstance(e, httpx.HTTPStatusError):
@@ -737,7 +771,14 @@ def _extract_stroke_data(node: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
             stroke_colors.append(stroke_data)
 
-    return {
+    # Check for individual stroke weights
+    individual_weights = {}
+    for side, key in [('top', 'strokeTopWeight'), ('right', 'strokeRightWeight'),
+                       ('bottom', 'strokeBottomWeight'), ('left', 'strokeLeftWeight')]:
+        if key in node:
+            individual_weights[side] = node[key]
+
+    result = {
         'colors': stroke_colors,
         'weight': node.get('strokeWeight', 1),
         'align': node.get('strokeAlign', 'INSIDE'),
@@ -747,6 +788,11 @@ def _extract_stroke_data(node: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         'dashes': node.get('strokeDashes', []),
         'dashCap': node.get('strokeDashCap', 'NONE')
     }
+
+    if individual_weights:
+        result['individualWeights'] = individual_weights
+
+    return result
 
 
 def _extract_corner_radii(node: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -776,6 +822,133 @@ def _extract_corner_radii(node: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _extract_children_summary(children: List[Dict[str, Any]], depth: int = 0, max_depth: int = 2) -> List[Dict[str, Any]]:
+    """Extract summary information for child nodes up to max_depth.
+
+    Depth 0 (direct children): name, type, id, size, fills summary, text content, child count
+    Depth 1 (grandchildren): name, type, id, size, child count
+    """
+    MAX_CHILDREN_PER_LEVEL = 30
+    summaries = []
+
+    for child in children[:MAX_CHILDREN_PER_LEVEL]:
+        if not child.get('visible', True):
+            continue
+
+        summary: Dict[str, Any] = {
+            'name': child.get('name', 'Unknown'),
+            'type': child.get('type', 'UNKNOWN'),
+            'id': child.get('id', ''),
+        }
+
+        # Size from bounding box
+        bbox = child.get('absoluteBoundingBox')
+        if bbox:
+            summary['width'] = round(bbox.get('width', 0), 1)
+            summary['height'] = round(bbox.get('height', 0), 1)
+
+        # Depth 0 gets richer details
+        if depth == 0:
+            # Fills summary (compact)
+            fills = child.get('fills', [])
+            visible_fills = [f for f in fills if f.get('visible', True)]
+            if visible_fills:
+                fill_summary = []
+                for f in visible_fills[:3]:
+                    f_type = f.get('type', '')
+                    if f_type == 'SOLID':
+                        color = f.get('color', {})
+                        hex_color = '#{:02x}{:02x}{:02x}'.format(
+                            int(color.get('r', 0) * 255),
+                            int(color.get('g', 0) * 255),
+                            int(color.get('b', 0) * 255)
+                        )
+                        fill_summary.append(hex_color)
+                    elif 'GRADIENT' in f_type:
+                        fill_summary.append(f_type.replace('GRADIENT_', '').lower() + ' gradient')
+                    elif f_type == 'IMAGE':
+                        fill_summary.append('image')
+                if fill_summary:
+                    summary['fills'] = fill_summary
+
+            # Text content
+            if child.get('type') == 'TEXT':
+                chars = child.get('characters', '')
+                if chars:
+                    summary['text'] = chars[:100] + ('...' if len(chars) > 100 else '')
+
+            # Auto-layout info
+            layout_mode = child.get('layoutMode')
+            if layout_mode and layout_mode != 'NONE':
+                summary['layoutMode'] = layout_mode
+                gap = child.get('itemSpacing', 0)
+                if gap:
+                    summary['gap'] = gap
+
+        # Recurse into grandchildren
+        grandchildren = child.get('children', [])
+        if grandchildren:
+            summary['childrenCount'] = len(grandchildren)
+            if depth < max_depth - 1:
+                summary['children'] = _extract_children_summary(grandchildren, depth + 1, max_depth)
+
+        summaries.append(summary)
+
+    if len(children) > MAX_CHILDREN_PER_LEVEL:
+        summaries.append({
+            '_truncated': True,
+            '_message': f'{len(children) - MAX_CHILDREN_PER_LEVEL} more children not shown.'
+        })
+
+    return summaries
+
+
+def _render_children_markdown(lines: List[str], children: List[Dict[str, Any]], indent: int = 0) -> None:
+    """Render children summary list as markdown."""
+    prefix = '  ' * indent
+    for child in children:
+        if child.get('_truncated'):
+            lines.append(f"{prefix}- _{child.get('_message', 'truncated')}_")
+            continue
+
+        name = child.get('name', 'Unknown')
+        node_type = child.get('type', '')
+        node_id = child.get('id', '')
+        w = child.get('width', 0)
+        h = child.get('height', 0)
+
+        # Main line: name, type, size
+        size_str = f" ({w}x{h})" if w or h else ""
+        line = f"{prefix}- **{name}** `{node_type}` `{node_id}`{size_str}"
+        lines.append(line)
+
+        # Fills (depth-0 only)
+        fills = child.get('fills')
+        if fills:
+            lines.append(f"{prefix}  - Fills: {', '.join(str(f) for f in fills)}")
+
+        # Text content
+        text = child.get('text')
+        if text:
+            lines.append(f'{prefix}  - Text: "{text}"')
+
+        # Layout
+        layout = child.get('layoutMode')
+        if layout:
+            gap = child.get('gap', 0)
+            gap_str = f", gap: {gap}" if gap else ""
+            lines.append(f"{prefix}  - Layout: {layout}{gap_str}")
+
+        # Recurse into grandchildren
+        sub_children = child.get('children')
+        if sub_children:
+            _render_children_markdown(lines, sub_children, indent + 1)
+        elif child.get('childrenCount', 0) > 0:
+            lines.append(f"{prefix}  - Children: {child['childrenCount']} node(s)")
+
+    lines.append("")
+
+
 def _extract_constraints(node: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Extract layout constraints for responsive behavior."""
     constraints = node.get('constraints', {})
@@ -789,7 +962,7 @@ def _extract_constraints(node: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 
 def _extract_transform(node: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract transform properties."""
+    """Extract transform properties including flip detection."""
     transform = {
         'rotation': node.get('rotation', 0),
         'preserveRatio': node.get('preserveRatio', False)
@@ -797,6 +970,18 @@ def _extract_transform(node: Dict[str, Any]) -> Dict[str, Any]:
 
     if 'relativeTransform' in node:
         transform['relativeTransform'] = node['relativeTransform']
+        # Detect flip from negative scale in transform matrix
+        # relativeTransform: [[a, b, tx], [c, d, ty]]
+        rt = node['relativeTransform']
+        try:
+            a = float(rt[0][0])
+            d = float(rt[1][1])
+            if a < 0:
+                transform['flippedHorizontally'] = True
+            if d < 0:
+                transform['flippedVertically'] = True
+        except (IndexError, TypeError, ValueError):
+            pass
 
     return transform
 
@@ -1471,7 +1656,7 @@ def _extract_size_constraints(node: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return constraints if constraints else None
 
 
-def _generate_implementation_hints(node: Dict[str, Any], interactions: Optional[List] = None) -> Dict[str, Any]:
+def _generate_implementation_hints(node: Dict[str, Any], interactions: Optional[List] = None, framework: str = 'css') -> Dict[str, Any]:
     """Generate AI-friendly implementation hints based on node analysis.
 
     Provides guidance for layout, responsiveness, interactions, accessibility,
@@ -1489,30 +1674,78 @@ def _generate_implementation_hints(node: Dict[str, Any], interactions: Optional[
     layout_mode = node.get('layoutMode')
 
     # Layout hints
+    spacing = node.get('itemSpacing', 0)
     if layout_mode:
-        direction = 'row' if layout_mode == 'HORIZONTAL' else 'column'
-        layout_hints.append(f"Use flexbox with flex-direction: {direction}")
+        if framework in ('swiftui',):
+            if layout_mode == 'VERTICAL':
+                layout_hints.append(f"Use VStack with spacing: {spacing}")
+            elif layout_mode == 'HORIZONTAL':
+                layout_hints.append(f"Use HStack with spacing: {spacing}")
 
-        # Check for wrapping
-        if node.get('layoutWrap') == 'WRAP':
-            layout_hints.append("Enable flex-wrap for responsive wrapping")
+            # Check for wrapping
+            if node.get('layoutWrap') == 'WRAP':
+                layout_hints.append("Use LazyVGrid or custom flow layout for wrapping")
 
-        # Check for alignment
-        primary_align = node.get('primaryAxisAlignItems', 'MIN')
-        counter_align = node.get('counterAxisAlignItems', 'MIN')
-        if primary_align == 'SPACE_BETWEEN':
-            layout_hints.append("Use justify-content: space-between for distributed spacing")
-        elif primary_align == 'CENTER':
-            layout_hints.append("Center items along main axis")
-        if counter_align == 'CENTER':
-            layout_hints.append("Center items along cross axis")
+            # Alignment
+            primary_align = node.get('primaryAxisAlignItems', 'MIN')
+            counter_align = node.get('counterAxisAlignItems', 'MIN')
+            if primary_align == 'SPACE_BETWEEN':
+                layout_hints.append("Use Spacer() between items for distributed spacing")
+            elif primary_align == 'CENTER':
+                layout_hints.append("Center items along main axis with alignment: .center")
+            if counter_align == 'CENTER':
+                layout_hints.append("Center items along cross axis with alignment: .center")
+
+        elif framework in ('kotlin',):
+            if layout_mode == 'VERTICAL':
+                layout_hints.append(f"Use Column with verticalArrangement spacedBy {spacing}.dp")
+            elif layout_mode == 'HORIZONTAL':
+                layout_hints.append(f"Use Row with horizontalArrangement spacedBy {spacing}.dp")
+
+            # Check for wrapping
+            if node.get('layoutWrap') == 'WRAP':
+                layout_hints.append("Use FlowRow or FlowColumn for wrapping layout")
+
+            # Alignment
+            primary_align = node.get('primaryAxisAlignItems', 'MIN')
+            counter_align = node.get('counterAxisAlignItems', 'MIN')
+            if primary_align == 'SPACE_BETWEEN':
+                layout_hints.append("Use Arrangement.SpaceBetween for distributed spacing")
+            elif primary_align == 'CENTER':
+                layout_hints.append("Center items along main axis with Arrangement.Center")
+            if counter_align == 'CENTER':
+                layout_hints.append("Center items along cross axis with Alignment.CenterHorizontally/CenterVertically")
+
+        else:
+            # Default CSS hints
+            direction = 'row' if layout_mode == 'HORIZONTAL' else 'column'
+            layout_hints.append(f"Use flexbox with flex-direction: {direction}")
+
+            # Check for wrapping
+            if node.get('layoutWrap') == 'WRAP':
+                layout_hints.append("Enable flex-wrap for responsive wrapping")
+
+            # Check for alignment
+            primary_align = node.get('primaryAxisAlignItems', 'MIN')
+            counter_align = node.get('counterAxisAlignItems', 'MIN')
+            if primary_align == 'SPACE_BETWEEN':
+                layout_hints.append("Use justify-content: space-between for distributed spacing")
+            elif primary_align == 'CENTER':
+                layout_hints.append("Center items along main axis")
+            if counter_align == 'CENTER':
+                layout_hints.append("Center items along cross axis")
 
     # Check for grid-like layouts (multiple children with same size)
     children = node.get('children', [])
     if len(children) >= 3:
         child_widths = [c.get('absoluteBoundingBox', {}).get('width', 0) for c in children if c.get('absoluteBoundingBox')]
         if child_widths and len(set(round(w) for w in child_widths)) == 1:
-            layout_hints.append(f"Consider CSS Grid with {len(children)}-column layout")
+            if framework in ('swiftui',):
+                layout_hints.append(f"Consider LazyVGrid with {len(children)}-column GridItem layout")
+            elif framework in ('kotlin',):
+                layout_hints.append(f"Consider LazyVerticalGrid with {len(children)} columns")
+            else:
+                layout_hints.append(f"Consider CSS Grid with {len(children)}-column layout")
 
     # Responsive hints based on size
     bbox = node.get('absoluteBoundingBox', {})
@@ -1804,7 +2037,7 @@ def _transform_to_css(node: Dict[str, Any]) -> Optional[str]:
         if abs(angle_deg) > 0.1:  # Only add if significant
             transforms.append(f"rotate({angle_deg:.1f}deg)")
 
-    # relativeTransform matrix (skew, scale)
+    # relativeTransform matrix (skew, scale, flip)
     relative_transform = node.get('relativeTransform')
     if relative_transform and len(relative_transform) >= 2:
         # relativeTransform is [[a, b, tx], [c, d, ty]]
@@ -1813,7 +2046,13 @@ def _transform_to_css(node: Dict[str, Any]) -> Optional[str]:
         c = relative_transform[1][0] if len(relative_transform[1]) > 0 else 0
         d = relative_transform[1][1] if len(relative_transform[1]) > 1 else 1
 
-        # Check for scale (not just rotation which we already handled)
+        # Detect horizontal/vertical flip (negative scale values)
+        if a < -0.01:
+            transforms.append("scaleX(-1)")
+        if d < -0.01:
+            transforms.append("scaleY(-1)")
+
+        # Check for non-unit scale (use absolute values since flip handled above)
         scale_x = (a**2 + c**2)**0.5
         scale_y = (b**2 + d**2)**0.5
         if abs(scale_x - 1) > 0.01 or abs(scale_y - 1) > 0.01:
@@ -1872,6 +2111,317 @@ def _text_decoration_to_css(decoration: str) -> Optional[str]:
         'STRIKETHROUGH': 'line-through'
     }
     return decoration_map.get(decoration)
+
+
+def _build_css_ready_background(fills: List[Dict[str, Any]], node_opacity: float = 1.0) -> Optional[str]:
+    """Build CSS-ready background property from fills and node opacity."""
+    if not fills:
+        return None
+    css_parts = []
+    for fill in fills:
+        fill_type = fill.get('fillType', 'SOLID')
+        fill_opacity = fill.get('opacity', 1)
+        effective_opacity = fill_opacity * node_opacity
+        if fill_type == 'SOLID':
+            hex_color = fill.get('hex', fill.get('color', '#000000'))
+            rgb = _hex_to_rgb(hex_color)
+            if effective_opacity < 1:
+                css_parts.append(f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, {effective_opacity:.2f})")
+            else:
+                css_parts.append(hex_color)
+        elif fill_type.startswith('GRADIENT_'):
+            gradient = fill.get('gradient', {})
+            stops = gradient.get('stops', [])
+            gradient_type = gradient.get('type', 'LINEAR')
+            stops_css = []
+            for stop in stops:
+                stop_hex = stop.get('color', '#000000')
+                stop_opacity = stop.get('opacity', 1)
+                position = stop.get('position', 0)
+                stop_rgb = _hex_to_rgb(stop_hex)
+                eff_op = stop_opacity * effective_opacity
+                if eff_op < 1:
+                    stops_css.append(f"rgba({stop_rgb[0]}, {stop_rgb[1]}, {stop_rgb[2]}, {eff_op:.2f}) {int(position * 100)}%")
+                else:
+                    stops_css.append(f"{stop_hex} {int(position * 100)}%")
+            stops_str = ', '.join(stops_css)
+            if gradient_type == 'LINEAR':
+                angle = gradient.get('angle', 0)
+                css_parts.append(f"linear-gradient({int(angle)}deg, {stops_str})")
+            elif gradient_type == 'RADIAL':
+                css_parts.append(f"radial-gradient(circle, {stops_str})")
+            elif gradient_type == 'ANGULAR':
+                css_parts.append(f"conic-gradient({stops_str})")
+            elif gradient_type == 'DIAMOND':
+                css_parts.append(f"radial-gradient(ellipse, {stops_str})")
+    if not css_parts:
+        return None
+    if len(css_parts) == 1:
+        return css_parts[0]
+    return ', '.join(css_parts)
+
+
+def _build_css_ready_border(strokes: Optional[Dict[str, Any]], corner_radii: Optional[Dict[str, Any]], node_opacity: float = 1.0) -> Optional[Dict[str, str]]:
+    """Build CSS-ready border properties from strokes and corner radii."""
+    result = {}
+    if strokes:
+        weight = strokes.get('weight', 0)
+        align = strokes.get('align', 'INSIDE')
+        colors = strokes.get('colors', [])
+        dashes = strokes.get('dashes', [])
+        if weight and colors:
+            first_color = colors[0]
+            style = 'dashed' if dashes else 'solid'
+            color_hex = first_color.get('hex', first_color.get('color', '#000000'))
+            color_opacity = first_color.get('opacity', 1)
+            effective_opacity = color_opacity * node_opacity
+            if effective_opacity < 1:
+                rgb = _hex_to_rgb(color_hex)
+                color_css = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, {effective_opacity:.2f})"
+            else:
+                color_css = color_hex
+            result['border'] = f"{weight}px {style} {color_css}"
+            if align == 'INSIDE':
+                result['border-style-note'] = 'box-sizing: border-box (stroke inside)'
+            elif align == 'OUTSIDE':
+                result['border-style-note'] = 'outline recommended (stroke outside)'
+            # Individual stroke weights
+            ind_weights = strokes.get('individualWeights')
+            if ind_weights:
+                for side, w in ind_weights.items():
+                    result[f'border-{side}'] = f"{w}px {style} {color_css}"
+    if corner_radii:
+        tl = corner_radii.get('topLeft', 0)
+        tr = corner_radii.get('topRight', 0)
+        br = corner_radii.get('bottomRight', 0)
+        bl = corner_radii.get('bottomLeft', 0)
+        if corner_radii.get('isUniform'):
+            result['border-radius'] = f"{int(tl)}px"
+        else:
+            result['border-radius'] = f"{int(tl)}px {int(tr)}px {int(br)}px {int(bl)}px"
+    return result if result else None
+
+
+def _build_css_ready_shadow(effects: Optional[Dict[str, Any]], node_opacity: float = 1.0) -> Optional[Dict[str, str]]:
+    """Build CSS-ready shadow and blur properties from effects."""
+    if not effects:
+        return None
+    result = {}
+    shadows = effects.get('shadows') or []
+    blurs = effects.get('blurs') or []
+    if shadows:
+        box_shadows = []
+        for shadow in shadows:
+            shadow_type = shadow.get('type', 'DROP_SHADOW')
+            offset = shadow.get('offset', {'x': 0, 'y': 0})
+            radius = shadow.get('radius', 0)
+            spread = shadow.get('spread', 0)
+            hex_color = shadow.get('hex', shadow.get('color', '#000000'))
+            rgb = _hex_to_rgb(hex_color)
+            # Preserve shadow's own alpha channel (common in Figma: rgba(0,0,0,0.25))
+            # hex_color may contain alpha info; check if original color had alpha
+            shadow_opacity = shadow.get('opacity', 1)
+            effective_shadow_opacity = shadow_opacity * node_opacity
+            color_str = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, {effective_shadow_opacity:.2f})"
+            inset = 'inset ' if shadow_type == 'INNER_SHADOW' else ''
+            ox = int(offset.get('x', 0))
+            oy = int(offset.get('y', 0))
+            box_shadows.append(f"{inset}{ox}px {oy}px {int(radius)}px {int(spread)}px {color_str}")
+        result['box-shadow'] = ', '.join(box_shadows)
+    if blurs:
+        for blur in blurs:
+            blur_type = blur.get('type', '')
+            blur_radius = blur.get('radius', 0)
+            if blur_type == 'LAYER_BLUR':
+                result['filter'] = f"blur({int(blur_radius)}px)"
+            elif blur_type == 'BACKGROUND_BLUR':
+                result['backdrop-filter'] = f"blur({int(blur_radius)}px)"
+    return result if result else None
+
+
+def _build_css_ready_layout(auto_layout: Optional[Dict[str, Any]], bounds: Optional[Dict[str, Any]], size_constraints: Optional[Dict[str, Any]]) -> Optional[Dict[str, str]]:
+    """Build CSS-ready layout properties from auto-layout, bounds and constraints."""
+    result = {}
+    if auto_layout:
+        mode = auto_layout.get('mode', 'HORIZONTAL')
+        result['display'] = 'flex'
+        result['flex-direction'] = 'row' if mode == 'HORIZONTAL' else 'column'
+        gap = auto_layout.get('gap', 0)
+        if gap:
+            result['gap'] = f"{int(gap)}px"
+        padding = auto_layout.get('padding', {})
+        t = int(padding.get('top', 0))
+        r = int(padding.get('right', 0))
+        b = int(padding.get('bottom', 0))
+        l = int(padding.get('left', 0))
+        if t == r == b == l:
+            if t > 0:
+                result['padding'] = f"{t}px"
+        elif t == b and r == l:
+            result['padding'] = f"{t}px {r}px"
+        else:
+            result['padding'] = f"{t}px {r}px {b}px {l}px"
+        primary = auto_layout.get('primaryAxisAlign', 'MIN')
+        counter = auto_layout.get('counterAxisAlign', 'MIN')
+        align_map = {'MIN': 'flex-start', 'CENTER': 'center', 'MAX': 'flex-end', 'SPACE_BETWEEN': 'space-between'}
+        result['justify-content'] = align_map.get(primary, 'flex-start')
+        result['align-items'] = align_map.get(counter, 'flex-start')
+        wrap = auto_layout.get('layoutWrap', 'NO_WRAP')
+        if wrap == 'WRAP':
+            result['flex-wrap'] = 'wrap'
+        primary_sizing = auto_layout.get('primaryAxisSizing', 'AUTO')
+        counter_sizing = auto_layout.get('counterAxisSizing', 'AUTO')
+        if mode == 'HORIZONTAL':
+            if primary_sizing == 'FIXED' and bounds:
+                result['width'] = f"{int(bounds.get('width', 0))}px"
+            if counter_sizing == 'FIXED' and bounds:
+                result['height'] = f"{int(bounds.get('height', 0))}px"
+        else:
+            if primary_sizing == 'FIXED' and bounds:
+                result['height'] = f"{int(bounds.get('height', 0))}px"
+            if counter_sizing == 'FIXED' and bounds:
+                result['width'] = f"{int(bounds.get('width', 0))}px"
+    elif bounds:
+        w = bounds.get('width', 0)
+        h = bounds.get('height', 0)
+        if w:
+            result['width'] = f"{int(w)}px"
+        if h:
+            result['height'] = f"{int(h)}px"
+    if size_constraints:
+        if 'minWidth' in size_constraints:
+            result['min-width'] = f"{int(size_constraints['minWidth'])}px"
+        if 'maxWidth' in size_constraints:
+            result['max-width'] = f"{int(size_constraints['maxWidth'])}px"
+        if 'minHeight' in size_constraints:
+            result['min-height'] = f"{int(size_constraints['minHeight'])}px"
+        if 'maxHeight' in size_constraints:
+            result['max-height'] = f"{int(size_constraints['maxHeight'])}px"
+    return result if result else None
+
+
+def _build_css_ready_typography(text_props: Optional[Dict[str, Any]]) -> Optional[Dict[str, str]]:
+    """Build CSS-ready typography properties from text node data."""
+    if not text_props:
+        return None
+    result = {}
+    family = text_props.get('fontFamily')
+    weight = text_props.get('fontWeight', 400)
+    size = text_props.get('fontSize')
+    line_height = text_props.get('lineHeight')
+    letter_spacing = text_props.get('letterSpacing')
+    text_align = text_props.get('textAlign')
+    text_case = text_props.get('textCase')
+    text_decoration = text_props.get('textDecoration')
+    if family and size:
+        lh_part = f"/{int(line_height)}px" if line_height else ''
+        result['font'] = f"{int(weight)} {int(size)}px{lh_part} '{family}', sans-serif"
+    if family:
+        result['font-family'] = f"'{family}', sans-serif"
+    if size:
+        result['font-size'] = f"{int(size)}px"
+    if weight:
+        result['font-weight'] = str(int(weight))
+    if line_height:
+        result['line-height'] = f"{int(line_height)}px"
+    if letter_spacing:
+        result['letter-spacing'] = f"{letter_spacing:.2f}px"
+    if text_align:
+        align_map = {'LEFT': 'left', 'CENTER': 'center', 'RIGHT': 'right', 'JUSTIFIED': 'justify'}
+        css_align = align_map.get(text_align)
+        if css_align:
+            result['text-align'] = css_align
+    if text_case and text_case != 'ORIGINAL':
+        css_case = _text_case_to_css(text_case)
+        if css_case:
+            result['text-transform'] = css_case
+    if text_decoration and text_decoration != 'NONE':
+        css_dec = _text_decoration_to_css(text_decoration)
+        if css_dec:
+            result['text-decoration'] = css_dec
+    return result if result else None
+
+
+def _transform_to_css_from_details(transform: Dict[str, Any]) -> Optional[str]:
+    """Convert extracted transform details to CSS transform string."""
+    parts = []
+    if transform.get('flippedHorizontally'):
+        parts.append("scaleX(-1)")
+    if transform.get('flippedVertically'):
+        parts.append("scaleY(-1)")
+    rotation = transform.get('rotation', 0)
+    if rotation:
+        angle_deg = -rotation * (180 / 3.14159265359)
+        if abs(angle_deg) > 0.1:
+            parts.append(f"rotate({angle_deg:.1f}deg)")
+    return ' '.join(parts) if parts else None
+
+
+def _build_css_ready_section(node_details: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    """Build complete CSS-ready properties dict from node details.
+    Combines all extracted design properties into CSS shorthand values
+    that AI can directly use for code generation.
+    """
+    css = {}
+    node_opacity = node_details.get('opacity', 1)
+    # Note: CSS opacity applies to the entire element, so we don't fold
+    # node_opacity into individual color values. Instead we set opacity
+    # separately and use fill/stroke opacities only for colors.
+    # Background/Color
+    fills = node_details.get('fills', [])
+    bg_css = _build_css_ready_background(fills, 1.0)
+    if bg_css:
+        if node_details.get('type') == 'TEXT':
+            css['color'] = bg_css
+        else:
+            css['background'] = bg_css
+    # Opacity (applied to entire element by browser)
+    if node_opacity < 1:
+        css['opacity'] = f"{node_opacity}"
+    # Border (don't apply node_opacity to border colors; CSS opacity handles it)
+    border_css = _build_css_ready_border(
+        node_details.get('strokes'),
+        node_details.get('cornerRadius'),
+        1.0
+    )
+    if border_css:
+        css.update(border_css)
+    # Shadow & Blur (shadows are rendered outside opacity context, so apply node_opacity)
+    shadow_css = _build_css_ready_shadow(
+        node_details.get('effects'),
+        node_opacity
+    )
+    if shadow_css:
+        css.update(shadow_css)
+    # Layout
+    layout_css = _build_css_ready_layout(
+        node_details.get('autoLayout'),
+        node_details.get('bounds'),
+        node_details.get('sizeConstraints')
+    )
+    if layout_css:
+        css.update(layout_css)
+    # Typography
+    typography_css = _build_css_ready_typography(
+        node_details.get('text')
+    )
+    if typography_css:
+        css.update(typography_css)
+    # Transform
+    transform = node_details.get('transform', {})
+    transform_css = _transform_to_css_from_details(transform)
+    if transform_css:
+        css['transform'] = transform_css
+    # Overflow
+    if node_details.get('clipsContent'):
+        css['overflow'] = 'hidden'
+    # Blend mode
+    blend_mode = node_details.get('blendMode')
+    if blend_mode:
+        css_blend = _blend_mode_to_css(blend_mode)
+        if css_blend:
+            css['mix-blend-mode'] = css_blend
+    return css if css else None
 
 
 def _text_case_to_swiftui(text_case: str) -> Optional[str]:
@@ -2484,1869 +3034,11 @@ def _node_to_simplified_tree(
     return simplified
 
 
-def _generate_react_code(node: Dict[str, Any], component_name: str, use_tailwind: bool = True) -> str:
-    """Generate detailed React component code from Figma node with all nested children."""
-    # Generate the inner JSX content recursively
-    inner_jsx = _recursive_node_to_jsx(node, indent=6, use_tailwind=use_tailwind)
-
-    if use_tailwind:
-        code = f'''import React from 'react';
-
-interface {component_name}Props {{
-  className?: string;
-}}
-
-export const {component_name}: React.FC<{component_name}Props> = ({{
-  className = '',
-}}) => {{
-  return (
-{inner_jsx}
-  );
-}};
-
-export default {component_name};
-'''
-    else:
-        code = f'''import React from 'react';
-
-interface {component_name}Props {{
-  className?: string;
-}}
-
-export const {component_name}: React.FC<{component_name}Props> = ({{
-  className = '',
-}}) => {{
-  return (
-{inner_jsx}
-  );
-}};
-
-export default {component_name};
-'''
-    return code
-
-
-def _recursive_node_to_vue_template(node: Dict[str, Any], indent: int = 4, use_tailwind: bool = True) -> str:
-    """Recursively generate Vue template code for nested children with enhanced styles."""
-    lines = []
-    prefix = ' ' * indent
-    node_type = node.get('type', '')
-    name = node.get('name', 'Unknown')
-
-    bbox = node.get('absoluteBoundingBox', {})
-    width = int(bbox.get('width', 0))
-    height = int(bbox.get('height', 0))
-
-    # Fills (with gradient support)
-    fills = node.get('fills', [])
-    bg_value, bg_type = _get_background_css(node)
-
-    # Strokes
-    stroke_data = _extract_stroke_data(node)
-    stroke_color = ''
-    stroke_weight = stroke_data['weight'] if stroke_data else 0
-    if stroke_data and stroke_data['colors']:
-        first_stroke = stroke_data['colors'][0]
-        if first_stroke.get('type') == 'SOLID':
-            stroke_color = first_stroke.get('color', '')
-
-    # Corner radius (with individual corners)
-    corner_radius_css = _corner_radii_to_css(node)
-
-    # Transform
-    transform_css = _transform_to_css(node)
-
-    # Blend mode and opacity
-    blend_mode = node.get('blendMode', 'PASS_THROUGH')
-    blend_mode_css = _blend_mode_to_css(blend_mode)
-    opacity = node.get('opacity', 1)
-
-    # Layout
-    layout_mode = node.get('layoutMode')
-    gap = node.get('itemSpacing', 0)
-    padding_top = node.get('paddingTop', 0)
-    padding_right = node.get('paddingRight', 0)
-    padding_bottom = node.get('paddingBottom', 0)
-    padding_left = node.get('paddingLeft', 0)
-
-    if node_type == 'TEXT':
-        text = node.get('characters', name)
-        style = node.get('style', {})
-        font_size = style.get('fontSize', 16)
-        font_weight = style.get('fontWeight', 400)
-        text_case = style.get('textCase', 'ORIGINAL')
-        text_decoration = style.get('textDecoration', 'NONE')
-        line_height = style.get('lineHeightPx')
-        letter_spacing = style.get('letterSpacing', 0)
-        text_align = style.get('textAlignHorizontal', 'LEFT').lower()
-
-        # Get hyperlink if present
-        hyperlink = node.get('hyperlink')
-        hyperlink_url = None
-        if hyperlink and hyperlink.get('type') == 'URL':
-            hyperlink_url = hyperlink.get('url', '')
-
-        text_color = ''
-        if fills and fills[0].get('type') == 'SOLID' and fills[0].get('visible', True):
-            text_color = _rgba_to_hex(fills[0].get('color', {}))
-
-        # Convert text case and decoration to CSS
-        text_transform = _text_case_to_css(text_case)
-        text_dec_value = _text_decoration_to_css(text_decoration)
-
-        # Get maxLines and textTruncation for line-clamp
-        max_lines = style.get('maxLines')
-        text_truncation = style.get('textTruncation', 'DISABLED')
-
-        if use_tailwind:
-            weight_class = TAILWIND_WEIGHT_MAP.get(font_weight, 'font-normal')
-            align_class = TAILWIND_ALIGN_MAP.get(text_align.upper(), '')
-
-            # Tailwind text-transform classes
-            transform_map = {'uppercase': 'uppercase', 'lowercase': 'lowercase', 'capitalize': 'capitalize'}
-            transform_class = transform_map.get(text_transform, '') if text_transform else ''
-
-            # Tailwind text-decoration classes
-            decoration_map = {'underline': 'underline', 'line-through': 'line-through'}
-            decoration_class = decoration_map.get(text_dec_value, '') if text_dec_value else ''
-
-            classes = [f'text-[{int(font_size)}px]', weight_class]
-            if text_color:
-                classes.append(f'text-[{text_color}]')
-            if line_height:
-                classes.append(f'leading-[{int(line_height)}px]')
-            if letter_spacing:
-                classes.append(f'tracking-[{letter_spacing:.2f}px]')
-            if align_class:
-                classes.append(align_class)
-            if transform_class:
-                classes.append(transform_class)
-            if decoration_class:
-                classes.append(decoration_class)
-
-            # Tailwind line-clamp for maxLines
-            if max_lines and max_lines > 0:
-                classes.append(f'line-clamp-{max_lines}')
-                if text_truncation == 'ENDING':
-                    classes.append('text-ellipsis')
-
-            # Paragraph spacing (margin-bottom)
-            paragraph_spacing = style.get('paragraphSpacing', 0)
-            if paragraph_spacing and paragraph_spacing > 0:
-                classes.append(f'mb-[{int(paragraph_spacing)}px]')
-
-            class_str = ' '.join(filter(None, classes))
-            # Wrap in anchor tag if hyperlink present
-            if hyperlink_url:
-                lines.append(f'{prefix}<a href="{hyperlink_url}" class="{class_str}" target="_blank" rel="noopener noreferrer">{text}</a>')
-            else:
-                lines.append(f'{prefix}<span class="{class_str}">{text}</span>')
-        else:
-            # Wrap in anchor tag if hyperlink present
-            if hyperlink_url:
-                lines.append(f'{prefix}<a href="{hyperlink_url}" class="text-{name.lower().replace(" ", "-")}" target="_blank" rel="noopener noreferrer">{text}</a>')
-            else:
-                lines.append(f'{prefix}<span class="text-{name.lower().replace(" ", "-")}">{text}</span>')
-    else:
-        if use_tailwind:
-            classes = []
-            inline_styles = []
-
-            if width:
-                classes.append(f'w-[{width}px]')
-            if height:
-                classes.append(f'h-[{height}px]')
-
-            # Background
-            if bg_value and bg_type:
-                if bg_type == 'color':
-                    classes.append(f'bg-[{bg_value}]')
-                elif bg_type in ('gradient', 'image', 'layered'):
-                    # Gradients, images, and layered backgrounds need inline style
-                    inline_styles.append(f"background: {bg_value}")
-
-            # Corner radius
-            if corner_radius_css:
-                classes.append(f'rounded-[{corner_radius_css}]')
-
-            # Strokes
-            if stroke_color and stroke_weight:
-                classes.append(f'border-[{stroke_weight}px]')
-                classes.append(f'border-[{stroke_color}]')
-
-            # Transform
-            if transform_css:
-                inline_styles.append(f"transform: {transform_css}")
-
-            # Blend mode
-            if blend_mode_css:
-                classes.append(f'mix-blend-{blend_mode_css}')
-
-            # Opacity
-            if opacity < 1:
-                classes.append(f'opacity-[{opacity}]')
-
-            # Layout
-            if layout_mode:
-                classes.append('flex')
-                classes.append('flex-col' if layout_mode == 'VERTICAL' else 'flex-row')
-                if gap:
-                    classes.append(f'gap-[{gap}px]')
-
-            # Padding
-            if padding_top:
-                classes.append(f'pt-[{padding_top}px]')
-            if padding_right:
-                classes.append(f'pr-[{padding_right}px]')
-            if padding_bottom:
-                classes.append(f'pb-[{padding_bottom}px]')
-            if padding_left:
-                classes.append(f'pl-[{padding_left}px]')
-
-            # Flex child properties (layoutGrow, layoutPositioning, layoutAlign)
-            layout_grow = node.get('layoutGrow', 0)
-            layout_positioning = node.get('layoutPositioning')
-            layout_align = node.get('layoutAlign')
-
-            if layout_grow and layout_grow > 0:
-                classes.append('grow')  # Tailwind: flex-grow: 1
-            if layout_positioning == 'ABSOLUTE':
-                classes.append('absolute')
-            if layout_align == 'STRETCH':
-                classes.append('self-stretch')
-            elif layout_align == 'INHERIT':
-                classes.append('self-auto')
-
-            class_str = ' '.join(filter(None, classes))
-
-            if inline_styles:
-                style_str = '; '.join(inline_styles)
-                lines.append(f'{prefix}<div class="{class_str}" style="{style_str}">')
-            else:
-                lines.append(f'{prefix}<div class="{class_str}">')
-        else:
-            class_name = name.lower().replace(' ', '-').replace('/', '-')
-            lines.append(f'{prefix}<div class="{class_name}">')
-
-        children = node.get('children', [])
-        for child in children[:MAX_CHILDREN_LIMIT]:
-            child_template = _recursive_node_to_vue_template(child, indent + 2, use_tailwind)
-            if child_template:
-                lines.append(child_template)
-
-        lines.append(f'{prefix}</div>')
-
-    return '\n'.join(lines)
-
-
-def _generate_vue_code(node: Dict[str, Any], component_name: str, use_tailwind: bool = True) -> str:
-    """Generate detailed Vue component code from Figma node with all nested children."""
-    inner_template = _recursive_node_to_vue_template(node, indent=4, use_tailwind=use_tailwind)
-
-    if use_tailwind:
-        code = f'''<script setup lang="ts">
-defineProps<{{
-  class?: string;
-}}>();
-</script>
-
-<template>
-{inner_template}
-</template>
-'''
-    else:
-        # Generate CSS for all nodes
-        css_rules = _generate_recursive_css(node, [])
-        css_code = '\n'.join(css_rules)
-
-        code = f'''<script setup lang="ts">
-defineProps<{{
-  class?: string;
-}}>();
-</script>
-
-<template>
-{inner_template}
-</template>
-
-<style scoped>
-{css_code}
-</style>
-'''
-    return code
-
-
-def _generate_recursive_css(node: Dict[str, Any], rules: List[str], parent_name: str = '') -> List[str]:
-    """Generate CSS rules for all nodes recursively."""
-    node_type = node.get('type', '')
-    name = node.get('name', 'Unknown')
-    class_name = name.lower().replace(' ', '-').replace('/', '-')
-
-    bbox = node.get('absoluteBoundingBox', {})
-    width = int(bbox.get('width', 0))
-    height = int(bbox.get('height', 0))
-
-    fills = node.get('fills', [])
-    bg_color = ''
-    if fills and fills[0].get('type') == 'SOLID' and fills[0].get('visible', True):
-        bg_color = _rgba_to_hex(fills[0].get('color', {}))
-
-    strokes = node.get('strokes', [])
-    stroke_css = ''
-    if strokes and strokes[0].get('type') == 'SOLID' and strokes[0].get('visible', True):
-        stroke_color = _rgba_to_hex(strokes[0].get('color', {}))
-        stroke_weight = node.get('strokeWeight', 1)
-        stroke_css = f"border: {stroke_weight}px solid {stroke_color};"
-
-    corner_radius = node.get('cornerRadius', 0)
-    layout_mode = node.get('layoutMode')
-    gap = node.get('itemSpacing', 0)
-    padding_top = node.get('paddingTop', 0)
-    padding_right = node.get('paddingRight', 0)
-    padding_bottom = node.get('paddingBottom', 0)
-    padding_left = node.get('paddingLeft', 0)
-
-    css_props = []
-    if width:
-        css_props.append(f"width: {width}px;")
-    if height:
-        css_props.append(f"height: {height}px;")
-    if bg_color:
-        css_props.append(f"background-color: {bg_color};")
-    if corner_radius:
-        css_props.append(f"border-radius: {corner_radius}px;")
-    if stroke_css:
-        css_props.append(stroke_css)
-    if layout_mode:
-        css_props.append("display: flex;")
-        css_props.append(f"flex-direction: {'column' if layout_mode == 'VERTICAL' else 'row'};")
-        if gap:
-            css_props.append(f"gap: {gap}px;")
-    if padding_top or padding_right or padding_bottom or padding_left:
-        css_props.append(f"padding: {padding_top}px {padding_right}px {padding_bottom}px {padding_left}px;")
-
-    if node_type == 'TEXT':
-        style = node.get('style', {})
-        font_size = style.get('fontSize', 16)
-        font_weight = style.get('fontWeight', 400)
-        text_case = style.get('textCase', 'ORIGINAL')
-        text_decoration = style.get('textDecoration', 'NONE')
-        line_height = style.get('lineHeightPx')
-        letter_spacing = style.get('letterSpacing', 0)
-        text_align = style.get('textAlignHorizontal', 'LEFT').lower()
-        font_family = style.get('fontFamily', '')
-        text_color = ''
-        if fills and fills[0].get('type') == 'SOLID':
-            text_color = _rgba_to_hex(fills[0].get('color', {}))
-
-        css_props = [f"font-size: {int(font_size)}px;", f"font-weight: {font_weight};"]
-        if text_color:
-            css_props.append(f"color: {text_color};")
-        if font_family:
-            css_props.append(f"font-family: '{font_family}', sans-serif;")
-        if line_height:
-            css_props.append(f"line-height: {line_height}px;")
-        if letter_spacing:
-            css_props.append(f"letter-spacing: {letter_spacing}px;")
-        if text_align != 'left':
-            css_props.append(f"text-align: {text_align};")
-
-        # Text transform (textCase)
-        text_transform = _text_case_to_css(text_case)
-        if text_transform:
-            css_props.append(f"text-transform: {text_transform};")
-
-        # Text decoration
-        text_dec_value = _text_decoration_to_css(text_decoration)
-        if text_dec_value:
-            css_props.append(f"text-decoration: {text_dec_value};")
-
-    if css_props:
-        rule = f".{class_name} {{\n  " + "\n  ".join(css_props) + "\n}"
-        rules.append(rule)
-
-    for child in node.get('children', [])[:20]:
-        _generate_recursive_css(child, rules, class_name)
-
-    return rules
-
-
-def _generate_css_code(node: Dict[str, Any], component_name: str) -> str:
-    """Generate pure CSS code from Figma node with enhanced style support."""
-    bbox = node.get('absoluteBoundingBox', {})
-    width = bbox.get('width', 'auto')
-    height = bbox.get('height', 'auto')
-
-    # Background (with gradient, image, and layered support)
-    bg_value, bg_type = _get_background_css(node)
-    bg_css = ''
-    if bg_value and bg_type:
-        if bg_type == 'color':
-            bg_css = f"background-color: {bg_value};"
-        elif bg_type in ('gradient', 'image', 'layered'):
-            # Use 'background' shorthand for gradients, images, and layered backgrounds
-            bg_css = f"background: {bg_value};"
-
-    # Strokes (comprehensive)
-    stroke_data = _extract_stroke_data(node)
-    stroke_css = ''
-    if stroke_data and stroke_data['colors']:
-        first_stroke = stroke_data['colors'][0]
-        if first_stroke.get('type') == 'SOLID':
-            stroke_color = first_stroke.get('color', '')
-            stroke_weight = stroke_data['weight']
-            stroke_css = f"border: {stroke_weight}px solid {stroke_color};"
-
-    # Border radius (with individual corners)
-    corner_radius_css = _corner_radii_to_css(node)
-    radius_css = f"border-radius: {corner_radius_css};" if corner_radius_css else ''
-
-    # Transform (rotation, scale)
-    transform_css = _transform_to_css(node)
-    transform_line = f"transform: {transform_css};" if transform_css else ''
-
-    # Blend mode
-    blend_mode = node.get('blendMode', 'PASS_THROUGH')
-    blend_mode_css = _blend_mode_to_css(blend_mode)
-    blend_line = f"mix-blend-mode: {blend_mode_css};" if blend_mode_css else ''
-
-    # Opacity
-    opacity = node.get('opacity', 1)
-    opacity_css = f"opacity: {opacity};" if opacity < 1 else ''
-
-    # Auto-layout
-    layout_mode = node.get('layoutMode')
-    layout_css = ''
-    if layout_mode:
-        direction = 'column' if layout_mode == 'VERTICAL' else 'row'
-        gap = node.get('itemSpacing', 0)
-        padding_top = node.get('paddingTop', 0)
-        padding_right = node.get('paddingRight', 0)
-        padding_bottom = node.get('paddingBottom', 0)
-        padding_left = node.get('paddingLeft', 0)
-
-        # Alignment
-        primary_align = node.get('primaryAxisAlignItems', 'MIN')
-        counter_align = node.get('counterAxisAlignItems', 'MIN')
-        justify_map = {'MIN': 'flex-start', 'CENTER': 'center', 'MAX': 'flex-end', 'SPACE_BETWEEN': 'space-between'}
-        items_map = {'MIN': 'flex-start', 'CENTER': 'center', 'MAX': 'flex-end'}
-
-        layout_css = f"""display: flex;
-  flex-direction: {direction};
-  gap: {gap}px;
-  padding: {padding_top}px {padding_right}px {padding_bottom}px {padding_left}px;
-  justify-content: {justify_map.get(primary_align, 'flex-start')};
-  align-items: {items_map.get(counter_align, 'flex-start')};"""
-
-    # Flex child properties (layoutGrow, layoutPositioning, layoutAlign)
-    flex_child_css = ''
-    layout_grow = node.get('layoutGrow', 0)
-    layout_positioning = node.get('layoutPositioning')
-    layout_align = node.get('layoutAlign')
-
-    flex_child_lines = []
-    if layout_grow and layout_grow > 0:
-        flex_child_lines.append(f"flex-grow: {layout_grow};")
-    if layout_positioning == 'ABSOLUTE':
-        flex_child_lines.append("position: absolute;")
-    if layout_align == 'STRETCH':
-        flex_child_lines.append("align-self: stretch;")
-    elif layout_align == 'INHERIT':
-        flex_child_lines.append("align-self: auto;")
-
-    if flex_child_lines:
-        flex_child_css = '\n  '.join(flex_child_lines)
-
-    # Effects (shadows and blurs)
-    effects_data = _extract_effects_data(node)
-    shadow_css = ''
-    blur_css = ''
-
-    if effects_data['shadows']:
-        shadow_parts = []
-        for shadow in effects_data['shadows']:
-            offset = shadow.get('offset', {'x': 0, 'y': 0})
-            shadow_type = shadow.get('type', 'DROP_SHADOW')
-            inset = 'inset ' if shadow_type == 'INNER_SHADOW' else ''
-            shadow_parts.append(
-                f"{inset}{int(offset.get('x', 0))}px {int(offset.get('y', 0))}px {int(shadow.get('radius', 0))}px {int(shadow.get('spread', 0))}px {shadow.get('color', '#000')}"
-            )
-        shadow_css = f"box-shadow: {', '.join(shadow_parts)};"
-
-    if effects_data['blurs']:
-        for blur in effects_data['blurs']:
-            if blur.get('type') == 'LAYER_BLUR':
-                blur_css = f"filter: blur({int(blur.get('radius', 0))}px);"
-            elif blur.get('type') == 'BACKGROUND_BLUR':
-                blur_css = f"backdrop-filter: blur({int(blur.get('radius', 0))}px);"
-
-    # Text-specific styles (for TEXT nodes)
-    text_css = ''
-    text_decoration_css = ''
-    hyperlink_comment = ''
-    if node.get('type') == 'TEXT':
-        style = node.get('style', {})
-
-        # Get hyperlink if present (CSS can't create links, but we add a comment)
-        hyperlink = node.get('hyperlink')
-        if hyperlink and hyperlink.get('type') == 'URL':
-            hyperlink_comment = f"/* Hyperlink: {hyperlink.get('url', '')} - Use <a> tag in HTML */"
-
-        # Text transform (textCase)
-        text_case = style.get('textCase', 'ORIGINAL')
-        text_transform = _text_case_to_css(text_case)
-        if text_transform:
-            text_css = f"text-transform: {text_transform};"
-
-        # Text decoration
-        text_decoration = style.get('textDecoration', 'NONE')
-        text_dec_value = _text_decoration_to_css(text_decoration)
-        if text_dec_value:
-            text_decoration_css = f"text-decoration: {text_dec_value};"
-
-        # Font properties
-        font_family = style.get('fontFamily', 'sans-serif')
-        font_size = style.get('fontSize', 16)
-        font_weight = style.get('fontWeight', 400)
-        line_height = style.get('lineHeightPx')
-        letter_spacing = style.get('letterSpacing', 0)
-        text_align = style.get('textAlignHorizontal', 'LEFT').lower()
-
-        text_css_lines = []
-        if hyperlink_comment:
-            text_css_lines.append(hyperlink_comment)
-        text_css_lines.extend([
-            f"font-family: '{font_family}', sans-serif;",
-            f"font-size: {font_size}px;",
-            f"font-weight: {font_weight};",
-        ])
-        if line_height:
-            text_css_lines.append(f"line-height: {line_height}px;")
-        if letter_spacing:
-            text_css_lines.append(f"letter-spacing: {letter_spacing}px;")
-        if text_align != 'left':
-            text_css_lines.append(f"text-align: {text_align};")
-        if text_transform:
-            text_css_lines.append(f"text-transform: {text_transform};")
-        if text_dec_value:
-            text_css_lines.append(f"text-decoration: {text_dec_value};")
-
-        # Text truncation (maxLines + textTruncation)
-        max_lines = style.get('maxLines')
-        text_truncation = style.get('textTruncation', 'DISABLED')
-        if max_lines and max_lines > 0:
-            text_css_lines.append("display: -webkit-box;")
-            text_css_lines.append(f"-webkit-line-clamp: {max_lines};")
-            text_css_lines.append("-webkit-box-orient: vertical;")
-            text_css_lines.append("overflow: hidden;")
-            if text_truncation == 'ENDING':
-                text_css_lines.append("text-overflow: ellipsis;")
-
-        # Paragraph spacing and indent
-        paragraph_spacing = style.get('paragraphSpacing', 0)
-        paragraph_indent = style.get('paragraphIndent', 0)
-        if paragraph_spacing and paragraph_spacing > 0:
-            text_css_lines.append(f"margin-bottom: {paragraph_spacing}px; /* paragraph spacing */")
-        if paragraph_indent and paragraph_indent > 0:
-            text_css_lines.append(f"text-indent: {paragraph_indent}px;")
-
-        text_css = '\n  '.join(text_css_lines)
-
-    # Build final CSS
-    css_lines = [
-        f"width: {int(width)}px;",
-        f"height: {int(height)}px;",
-    ]
-
-    if bg_css:
-        css_lines.append(bg_css)
-    if stroke_css:
-        css_lines.append(stroke_css)
-    if radius_css:
-        css_lines.append(radius_css)
-    if transform_line:
-        css_lines.append(transform_line)
-    if blend_line:
-        css_lines.append(blend_line)
-    if opacity_css:
-        css_lines.append(opacity_css)
-    if shadow_css:
-        css_lines.append(shadow_css)
-    if blur_css:
-        css_lines.append(blur_css)
-    if layout_css:
-        css_lines.append(layout_css)
-    if flex_child_css:
-        css_lines.append(flex_child_css)
-    if text_css:
-        css_lines.append(text_css)
-
-    css_content = '\n  '.join(css_lines)
-
-    code = f'''.{component_name.lower()} {{
-  {css_content}
-}}'''
-    return code
-
-
-def _generate_scss_code(node: Dict[str, Any], component_name: str) -> str:
-    """Generate SCSS code with variables from Figma node."""
-    bbox = node.get('absoluteBoundingBox', {})
-    width = bbox.get('width', 'auto')
-    height = bbox.get('height', 'auto')
-
-    # Background (with gradient support)
-    bg_value, bg_type = _get_background_css(node)
-
-    # Individual corner radii
-    border_radius_css = _corner_radii_to_css(node)
-
-    # Transform (rotation, scale)
-    transform_css = _transform_to_css(node)
-
-    # Blend mode
-    blend_mode = node.get('blendMode', 'PASS_THROUGH')
-    blend_mode_css = _blend_mode_to_css(blend_mode)
-
-    # Opacity
-    opacity = node.get('opacity', 1)
-
-    # Effects (shadows and blurs)
-    effects = node.get('effects', [])
-    shadow_parts = []
-    blur_value = None
-    backdrop_blur = None
-
-    for effect in effects:
-        if not effect.get('visible', True):
-            continue
-        effect_type = effect.get('type', '')
-        if effect_type in ['DROP_SHADOW', 'INNER_SHADOW']:
-            color = effect.get('color', {})
-            offset_x = effect.get('offset', {}).get('x', 0)
-            offset_y = effect.get('offset', {}).get('y', 0)
-            blur = effect.get('radius', 0)
-            spread = effect.get('spread', 0)
-            r = int(color.get('r', 0) * 255)
-            g = int(color.get('g', 0) * 255)
-            b = int(color.get('b', 0) * 255)
-            a = color.get('a', 1)
-            inset = 'inset ' if effect_type == 'INNER_SHADOW' else ''
-            shadow_parts.append(f'{inset}{offset_x}px {offset_y}px {blur}px {spread}px rgba({r}, {g}, {b}, {a:.2f})')
-        elif effect_type == 'LAYER_BLUR':
-            blur_value = effect.get('radius', 0)
-        elif effect_type == 'BACKGROUND_BLUR':
-            backdrop_blur = effect.get('radius', 0)
-
-    layout_mode = node.get('layoutMode')
-    gap = node.get('itemSpacing', 0)
-    padding_top = node.get('paddingTop', 0)
-    padding_right = node.get('paddingRight', 0)
-    padding_bottom = node.get('paddingBottom', 0)
-    padding_left = node.get('paddingLeft', 0)
-
-    # Advanced layout properties
-    primary_align = node.get('primaryAxisAlignItems', 'MIN')
-    counter_align = node.get('counterAxisAlignItems', 'MIN')
-    layout_wrap = node.get('layoutWrap', 'NO_WRAP')
-
-    # Map Figma alignment to CSS
-    align_map = {'MIN': 'flex-start', 'CENTER': 'center', 'MAX': 'flex-end', 'SPACE_BETWEEN': 'space-between'}
-    justify_content = align_map.get(primary_align, 'flex-start')
-    align_items = align_map.get(counter_align, 'flex-start')
-
-    # Build SCSS variables
-    variables_list = [
-        f'// {component_name} Variables',
-        f'$width: {int(width)}px;',
-        f'$height: {int(height)}px;',
-    ]
-
-    if bg_type == 'color' and bg_value:
-        variables_list.append(f'$bg-color: {bg_value};')
-    elif bg_type == 'gradient' and bg_value:
-        variables_list.append(f'$bg-gradient: {bg_value};')
-
-    variables_list.append(f'$border-radius: {border_radius_css};')
-    variables_list.append(f'$gap: {gap}px;')
-    variables_list.append(f'$padding: {padding_top}px {padding_right}px {padding_bottom}px {padding_left}px;')
-
-    if shadow_parts:
-        variables_list.append(f'$box-shadow: {", ".join(shadow_parts)};')
-    if opacity < 1:
-        variables_list.append(f'$opacity: {opacity:.2f};')
-    if transform_css:
-        variables_list.append(f'$transform: {transform_css};')
-
-    variables = '\n'.join(variables_list)
-
-    # Build styles
-    styles_list = [
-        'width: $width;',
-        'height: $height;',
-    ]
-
-    if bg_type == 'color':
-        styles_list.append('background-color: $bg-color;')
-    elif bg_type == 'gradient':
-        styles_list.append('background: $bg-gradient;')
-    elif bg_type == 'image':
-        styles_list.append(f'background: url("{bg_value}") center/cover no-repeat;')
-    elif bg_type == 'layered':
-        # Layered backgrounds (multiple fills combined)
-        styles_list.append(f'background: {bg_value};')
-
-    styles_list.append('border-radius: $border-radius;')
-
-    if shadow_parts:
-        styles_list.append('box-shadow: $box-shadow;')
-
-    if opacity < 1:
-        styles_list.append('opacity: $opacity;')
-
-    if transform_css:
-        styles_list.append('transform: $transform;')
-
-    if blend_mode_css:
-        styles_list.append(f'mix-blend-mode: {blend_mode_css};')
-
-    if blur_value:
-        styles_list.append(f'filter: blur({blur_value}px);')
-
-    if backdrop_blur:
-        styles_list.append(f'backdrop-filter: blur({backdrop_blur}px);')
-
-    if layout_mode:
-        styles_list.extend([
-            'display: flex;',
-            f'flex-direction: {"column" if layout_mode == "VERTICAL" else "row"};',
-            f'justify-content: {justify_content};',
-            f'align-items: {align_items};',
-            'gap: $gap;',
-            'padding: $padding;',
-        ])
-        if layout_wrap == 'WRAP':
-            styles_list.append('flex-wrap: wrap;')
-
-    # Flex child properties (layoutGrow, layoutPositioning, layoutAlign)
-    layout_grow = node.get('layoutGrow', 0)
-    layout_positioning = node.get('layoutPositioning')
-    layout_align = node.get('layoutAlign')
-
-    if layout_grow and layout_grow > 0:
-        styles_list.append(f'flex-grow: {layout_grow};')
-    if layout_positioning == 'ABSOLUTE':
-        styles_list.append('position: absolute;')
-    if layout_align == 'STRETCH':
-        styles_list.append('align-self: stretch;')
-    elif layout_align == 'INHERIT':
-        styles_list.append('align-self: auto;')
-
-    # Text-specific styles (for TEXT nodes)
-    if node.get('type') == 'TEXT':
-        style = node.get('style', {})
-        font_family = style.get('fontFamily', 'sans-serif')
-        font_size = style.get('fontSize', 16)
-        font_weight = style.get('fontWeight', 400)
-        line_height = style.get('lineHeightPx')
-        letter_spacing = style.get('letterSpacing', 0)
-        text_align = style.get('textAlignHorizontal', 'LEFT').lower()
-        text_case = style.get('textCase', 'ORIGINAL')
-        text_decoration = style.get('textDecoration', 'NONE')
-
-        # Get hyperlink if present (SCSS can't create links, but we add a comment)
-        hyperlink = node.get('hyperlink')
-        if hyperlink and hyperlink.get('type') == 'URL':
-            styles_list.insert(0, f"// Hyperlink: {hyperlink.get('url', '')} - Use <a> tag in HTML")
-
-        # Add typography variables
-        variables_list.insert(-1, f"$font-family: '{font_family}', sans-serif;")
-        variables_list.insert(-1, f'$font-size: {font_size}px;')
-        variables_list.insert(-1, f'$font-weight: {font_weight};')
-
-        styles_list.extend([
-            'font-family: $font-family;',
-            'font-size: $font-size;',
-            'font-weight: $font-weight;',
-        ])
-        if line_height:
-            styles_list.append(f'line-height: {line_height}px;')
-        if letter_spacing:
-            styles_list.append(f'letter-spacing: {letter_spacing}px;')
-        if text_align != 'left':
-            styles_list.append(f'text-align: {text_align};')
-
-        text_transform = _text_case_to_css(text_case)
-        if text_transform:
-            styles_list.append(f'text-transform: {text_transform};')
-
-        text_dec_value = _text_decoration_to_css(text_decoration)
-        if text_dec_value:
-            styles_list.append(f'text-decoration: {text_dec_value};')
-
-        # Text truncation (maxLines + textTruncation)
-        max_lines = style.get('maxLines')
-        text_truncation = style.get('textTruncation', 'DISABLED')
-        if max_lines and max_lines > 0:
-            styles_list.append('display: -webkit-box;')
-            styles_list.append(f'-webkit-line-clamp: {max_lines};')
-            styles_list.append('-webkit-box-orient: vertical;')
-            styles_list.append('overflow: hidden;')
-            if text_truncation == 'ENDING':
-                styles_list.append('text-overflow: ellipsis;')
-
-        # Paragraph spacing and indent
-        paragraph_spacing = style.get('paragraphSpacing', 0)
-        paragraph_indent = style.get('paragraphIndent', 0)
-        if paragraph_spacing and paragraph_spacing > 0:
-            styles_list.append(f'margin-bottom: {paragraph_spacing}px; // paragraph spacing')
-        if paragraph_indent and paragraph_indent > 0:
-            styles_list.append(f'text-indent: {paragraph_indent}px;')
-
-    styles = '\n  '.join(styles_list)
-
-    code = f'''{variables}
-
-.{component_name.lower().replace(" ", "-")} {{
-  {styles}
-}}'''
-    return code
-
-
-def _generate_swiftui_code(node: Dict[str, Any], component_name: str) -> str:
-    """Generate SwiftUI code from Figma node with comprehensive style support."""
-    bbox = node.get('absoluteBoundingBox', {})
-    width = bbox.get('width', 100)
-    height = bbox.get('height', 100)
-
-    # Background (with gradient support)
-    fills = node.get('fills', [])
-    bg_code = ''
-    gradient_def = ''
-
-    for fill in fills:
-        if not fill.get('visible', True):
-            continue
-        fill_type = fill.get('type', '')
-
-        if fill_type == 'SOLID':
-            color = fill.get('color', {})
-            r = color.get('r', 0)
-            g = color.get('g', 0)
-            b = color.get('b', 0)
-            a = fill.get('opacity', color.get('a', 1))
-            bg_code = f"Color(red: {r:.3f}, green: {g:.3f}, blue: {b:.3f}, opacity: {a:.2f})"
-            break
-
-        elif fill_type == 'GRADIENT_LINEAR':
-            stops = fill.get('gradientStops', [])
-            if stops:
-                gradient_stops = []
-                for stop in stops:
-                    pos = stop.get('position', 0)
-                    c = stop.get('color', {})
-                    gradient_stops.append(
-                        f"Gradient.Stop(color: Color(red: {c.get('r', 0):.3f}, green: {c.get('g', 0):.3f}, blue: {c.get('b', 0):.3f}), location: {pos:.2f})"
-                    )
-                gradient_def = f'''
-    let gradient = LinearGradient(
-        stops: [
-            {(",{chr(10)}            ").join(gradient_stops)}
-        ],
-        startPoint: .leading,
-        endPoint: .trailing
-    )'''
-                bg_code = 'gradient'
-            break
-
-        elif fill_type == 'GRADIENT_RADIAL':
-            stops = fill.get('gradientStops', [])
-            if stops:
-                gradient_stops = []
-                for stop in stops:
-                    pos = stop.get('position', 0)
-                    c = stop.get('color', {})
-                    gradient_stops.append(
-                        f"Gradient.Stop(color: Color(red: {c.get('r', 0):.3f}, green: {c.get('g', 0):.3f}, blue: {c.get('b', 0):.3f}), location: {pos:.2f})"
-                    )
-                gradient_def = f'''
-    let gradient = RadialGradient(
-        stops: [
-            {(",{chr(10)}            ").join(gradient_stops)}
-        ],
-        center: .center,
-        startRadius: 0,
-        endRadius: {max(width, height) / 2}
-    )'''
-                bg_code = 'gradient'
-            break
-
-    # Individual corner radii
-    corner_radii = node.get('rectangleCornerRadii', [])
-    corner_radius = node.get('cornerRadius', 0)
-    corner_code = ''
-
-    if corner_radii and len(corner_radii) == 4:
-        tl, tr, br, bl = corner_radii
-        if tl == tr == br == bl:
-            corner_code = f'.cornerRadius({tl})' if tl > 0 else ''
-        else:
-            # SwiftUI doesn't support individual corners directly, use clipShape with custom shape
-            corner_code = f'.clipShape(RoundedCorner(topLeft: {tl}, topRight: {tr}, bottomRight: {br}, bottomLeft: {bl}))'
-    elif corner_radius:
-        corner_code = f'.cornerRadius({corner_radius})'
-
-    # Rotation
-    rotation = node.get('rotation', 0)
-    rotation_code = f'.rotationEffect(.degrees({rotation:.1f}))' if rotation != 0 else ''
-
-    # Opacity
-    opacity = node.get('opacity', 1)
-    opacity_code = f'.opacity({opacity:.2f})' if opacity < 1 else ''
-
-    # Blend mode
-    blend_mode = node.get('blendMode', 'PASS_THROUGH')
-    blend_map = {
-        'MULTIPLY': '.multiply', 'SCREEN': '.screen', 'OVERLAY': '.overlay',
-        'DARKEN': '.darken', 'LIGHTEN': '.lighten', 'COLOR_DODGE': '.colorDodge',
-        'COLOR_BURN': '.colorBurn', 'SOFT_LIGHT': '.softLight', 'HARD_LIGHT': '.hardLight',
-        'DIFFERENCE': '.difference', 'EXCLUSION': '.exclusion'
-    }
-    blend_code = f'.blendMode({blend_map[blend_mode]})' if blend_mode in blend_map else ''
-
-    # Effects (shadows and blurs)
-    effects = node.get('effects', [])
-    shadow_codes = []
-    blur_code = ''
-
-    for effect in effects:
-        if not effect.get('visible', True):
-            continue
-        effect_type = effect.get('type', '')
-
-        if effect_type == 'DROP_SHADOW':
-            color = effect.get('color', {})
-            offset_x = effect.get('offset', {}).get('x', 0)
-            offset_y = effect.get('offset', {}).get('y', 0)
-            blur = effect.get('radius', 0)
-            r, g, b = color.get('r', 0), color.get('g', 0), color.get('b', 0)
-            a = color.get('a', 0.25)
-            shadow_codes.append(
-                f'.shadow(color: Color(red: {r:.3f}, green: {g:.3f}, blue: {b:.3f}, opacity: {a:.2f}), radius: {blur}, x: {offset_x}, y: {offset_y})'
-            )
-        elif effect_type == 'LAYER_BLUR':
-            blur_code = f'.blur(radius: {effect.get("radius", 0)})'
-
-    layout_mode = node.get('layoutMode')
-    gap = node.get('itemSpacing', 0)
-    padding_top = node.get('paddingTop', 0)
-    padding_right = node.get('paddingRight', 0)
-    padding_bottom = node.get('paddingBottom', 0)
-    padding_left = node.get('paddingLeft', 0)
-
-    # Advanced alignment
-    primary_align = node.get('primaryAxisAlignItems', 'MIN')
-    counter_align = node.get('counterAxisAlignItems', 'MIN')
-
-    # Determine container type and alignment
-    container = 'VStack' if layout_mode == 'VERTICAL' else 'HStack' if layout_mode == 'HORIZONTAL' else 'ZStack'
-
-    h_align_map = {'MIN': '.leading', 'CENTER': '.center', 'MAX': '.trailing'}
-    v_align_map = {'MIN': '.top', 'CENTER': '.center', 'MAX': '.bottom'}
-
-    if layout_mode == 'VERTICAL':
-        alignment = h_align_map.get(counter_align, '.center')
-    else:
-        alignment = v_align_map.get(counter_align, '.center')
-
-    spacing_param = f"alignment: {alignment}, spacing: {gap}" if gap else f"alignment: {alignment}"
-
-    # Generate children
-    children_code = _generate_swiftui_children(node.get('children', []))
-
-    # Build modifiers
-    modifiers = []
-    modifiers.append(f'.frame(width: {int(width)}, height: {int(height)})')
-    if bg_code:
-        modifiers.append(f'.background({bg_code})')
-    if corner_code:
-        modifiers.append(corner_code)
-    modifiers.extend(shadow_codes)
-    if blur_code:
-        modifiers.append(blur_code)
-    if rotation_code:
-        modifiers.append(rotation_code)
-    if opacity_code:
-        modifiers.append(opacity_code)
-    if blend_code:
-        modifiers.append(blend_code)
-    if padding_top or padding_right or padding_bottom or padding_left:
-        modifiers.append(f'.padding(EdgeInsets(top: {padding_top}, leading: {padding_left}, bottom: {padding_bottom}, trailing: {padding_right}))')
-
-    modifiers_str = '\n        '.join(modifiers)
-
-    # Custom RoundedCorner shape if needed
-    rounded_corner_shape = ''
-    if 'RoundedCorner' in corner_code:
-        rounded_corner_shape = '''
-
-// Custom shape for individual corner radii
-struct RoundedCorner: Shape {
-    var topLeft: CGFloat = 0
-    var topRight: CGFloat = 0
-    var bottomRight: CGFloat = 0
-    var bottomLeft: CGFloat = 0
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let w = rect.size.width
-        let h = rect.size.height
-
-        path.move(to: CGPoint(x: w / 2, y: 0))
-        path.addLine(to: CGPoint(x: w - topRight, y: 0))
-        path.addArc(center: CGPoint(x: w - topRight, y: topRight), radius: topRight, startAngle: .degrees(-90), endAngle: .degrees(0), clockwise: false)
-        path.addLine(to: CGPoint(x: w, y: h - bottomRight))
-        path.addArc(center: CGPoint(x: w - bottomRight, y: h - bottomRight), radius: bottomRight, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
-        path.addLine(to: CGPoint(x: bottomLeft, y: h))
-        path.addArc(center: CGPoint(x: bottomLeft, y: h - bottomLeft), radius: bottomLeft, startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
-        path.addLine(to: CGPoint(x: 0, y: topLeft))
-        path.addArc(center: CGPoint(x: topLeft, y: topLeft), radius: topLeft, startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
-        path.closeSubpath()
-
-        return path
-    }
-}'''
-
-    code = f'''import SwiftUI
-
-struct {component_name}: View {{{gradient_def}
-    var body: some View {{
-        {container}({spacing_param}) {{
-{children_code if children_code else '            // Content'}
-        }}
-        {modifiers_str}
-    }}
-}}
-
-#Preview {{
-    {component_name}()
-}}{rounded_corner_shape}
-'''
-    return code
-
-
-def _generate_swiftui_children(children: List[Dict[str, Any]], indent: int = 12) -> str:
-    """Generate SwiftUI code for children nodes."""
-    lines = []
-    prefix = ' ' * indent
-
-    for child in children[:MAX_NATIVE_CHILDREN_LIMIT]:
-        node_type = child.get('type', '')
-        name = child.get('name', 'Unknown')
-
-        if node_type == 'TEXT':
-            text = child.get('characters', name)
-            style = child.get('style', {})
-            font_size = style.get('fontSize', 16)
-            font_weight = style.get('fontWeight', 400)
-            text_case = style.get('textCase', 'ORIGINAL')
-            text_decoration = style.get('textDecoration', 'NONE')
-
-            # Get hyperlink if present
-            hyperlink = child.get('hyperlink')
-            hyperlink_url = None
-            if hyperlink and hyperlink.get('type') == 'URL':
-                hyperlink_url = hyperlink.get('url', '')
-
-            weight = SWIFTUI_WEIGHT_MAP.get(font_weight, '.regular')
-
-            # Use Link if hyperlink present, otherwise Text
-            if hyperlink_url:
-                lines.append(f'{prefix}Link("{text}", destination: URL(string: "{hyperlink_url}")!)')
-            else:
-                lines.append(f'{prefix}Text("{text}")')
-            lines.append(f'{prefix}    .font(.system(size: {font_size}, weight: {weight}))')
-
-            # Text case (textCase)
-            text_case_modifier = _text_case_to_swiftui(text_case)
-            if text_case_modifier:
-                lines.append(f'{prefix}    {text_case_modifier}')
-
-            # Text decoration (underline/strikethrough)
-            if text_decoration == 'UNDERLINE':
-                lines.append(f'{prefix}    .underline()')
-            elif text_decoration == 'STRIKETHROUGH':
-                lines.append(f'{prefix}    .strikethrough()')
-
-            # Line limit (maxLines)
-            max_lines = style.get('maxLines')
-            text_truncation = style.get('textTruncation', 'DISABLED')
-            if max_lines and max_lines > 0:
-                lines.append(f'{prefix}    .lineLimit({max_lines})')
-                if text_truncation == 'ENDING':
-                    lines.append(f'{prefix}    .truncationMode(.tail)')
-
-            # Paragraph spacing (bottom padding)
-            paragraph_spacing = style.get('paragraphSpacing', 0)
-            if paragraph_spacing and paragraph_spacing > 0:
-                lines.append(f'{prefix}    .padding(.bottom, {int(paragraph_spacing)})')
-        elif node_type in ['FRAME', 'GROUP', 'COMPONENT', 'INSTANCE']:
-            bbox = child.get('absoluteBoundingBox', {})
-            w = bbox.get('width', 50)
-            h = bbox.get('height', 50)
-
-            fills = child.get('fills', [])
-            if fills and fills[0].get('type') == 'SOLID':
-                color = fills[0].get('color', {})
-                lines.append(f'{prefix}Rectangle()')
-                lines.append(f'{prefix}    .fill(Color(red: {color.get("r", 0):.3f}, green: {color.get("g", 0):.3f}, blue: {color.get("b", 0):.3f}))')
-                lines.append(f'{prefix}    .frame(width: {int(w)}, height: {int(h)})')
-            else:
-                lines.append(f'{prefix}// {name}')
-                lines.append(f'{prefix}Rectangle()')
-                lines.append(f'{prefix}    .frame(width: {int(w)}, height: {int(h)})')
-        elif node_type == 'RECTANGLE':
-            bbox = child.get('absoluteBoundingBox', {})
-            w = bbox.get('width', 50)
-            h = bbox.get('height', 50)
-            lines.append(f'{prefix}Rectangle()')
-            lines.append(f'{prefix}    .frame(width: {int(w)}, height: {int(h)})')
-
-    return '\n'.join(lines)
-
-
-def _generate_kotlin_code(node: Dict[str, Any], component_name: str) -> str:
-    """Generate Kotlin Jetpack Compose code from Figma node with comprehensive style support."""
-    bbox = node.get('absoluteBoundingBox', {})
-    width = bbox.get('width', 100)
-    height = bbox.get('height', 100)
-
-    # Background (with gradient support)
-    fills = node.get('fills', [])
-    bg_code = ''
-    gradient_import = ''
-    brush_def = ''
-
-    for fill in fills:
-        if not fill.get('visible', True):
-            continue
-        fill_type = fill.get('type', '')
-
-        if fill_type == 'SOLID':
-            color = fill.get('color', {})
-            r = int(color.get('r', 0) * 255)
-            g = int(color.get('g', 0) * 255)
-            b = int(color.get('b', 0) * 255)
-            a = fill.get('opacity', color.get('a', 1))
-            bg_code = f".background(Color(0x{int(a*255):02X}{r:02X}{g:02X}{b:02X}))"
-            break
-
-        elif fill_type == 'GRADIENT_LINEAR':
-            stops = fill.get('gradientStops', [])
-            if stops:
-                gradient_import = 'import androidx.compose.ui.graphics.Brush'
-                colors = []
-                for stop in stops:
-                    c = stop.get('color', {})
-                    sr = int(c.get('r', 0) * 255)
-                    sg = int(c.get('g', 0) * 255)
-                    sb = int(c.get('b', 0) * 255)
-                    colors.append(f"Color(0xFF{sr:02X}{sg:02X}{sb:02X})")
-                brush_def = f'''    val gradientBrush = Brush.horizontalGradient(
-        colors = listOf({", ".join(colors)})
-    )
-'''
-                bg_code = '.background(gradientBrush)'
-            break
-
-        elif fill_type == 'GRADIENT_RADIAL':
-            stops = fill.get('gradientStops', [])
-            if stops:
-                gradient_import = 'import androidx.compose.ui.graphics.Brush'
-                colors = []
-                for stop in stops:
-                    c = stop.get('color', {})
-                    sr = int(c.get('r', 0) * 255)
-                    sg = int(c.get('g', 0) * 255)
-                    sb = int(c.get('b', 0) * 255)
-                    colors.append(f"Color(0xFF{sr:02X}{sg:02X}{sb:02X})")
-                brush_def = f'''    val gradientBrush = Brush.radialGradient(
-        colors = listOf({", ".join(colors)})
-    )
-'''
-                bg_code = '.background(gradientBrush)'
-            break
-
-    # Individual corner radii
-    corner_radii = node.get('rectangleCornerRadii', [])
-    corner_radius = node.get('cornerRadius', 0)
-    corner_code = ''
-
-    if corner_radii and len(corner_radii) == 4:
-        tl, tr, br, bl = corner_radii
-        if tl == tr == br == bl:
-            corner_code = f'.clip(RoundedCornerShape({tl}.dp))' if tl > 0 else ''
-        else:
-            corner_code = f'.clip(RoundedCornerShape(topStart = {tl}.dp, topEnd = {tr}.dp, bottomEnd = {br}.dp, bottomStart = {bl}.dp))'
-    elif corner_radius:
-        corner_code = f'.clip(RoundedCornerShape({corner_radius}.dp))'
-
-    # Rotation
-    rotation = node.get('rotation', 0)
-    rotation_code = f'.rotate({rotation:.1f}f)' if rotation != 0 else ''
-    rotation_import = 'import androidx.compose.ui.draw.rotate' if rotation != 0 else ''
-
-    # Opacity (alpha)
-    opacity = node.get('opacity', 1)
-    alpha_code = f'.alpha({opacity:.2f}f)' if opacity < 1 else ''
-    alpha_import = 'import androidx.compose.ui.draw.alpha' if opacity < 1 else ''
-
-    # Blend mode
-    blend_mode = node.get('blendMode', 'PASS_THROUGH')
-    blend_map = {
-        'MULTIPLY': 'BlendMode.Multiply', 'SCREEN': 'BlendMode.Screen',
-        'OVERLAY': 'BlendMode.Overlay', 'DARKEN': 'BlendMode.Darken',
-        'LIGHTEN': 'BlendMode.Lighten', 'COLOR_DODGE': 'BlendMode.ColorDodge',
-        'COLOR_BURN': 'BlendMode.ColorBurn', 'SOFT_LIGHT': 'BlendMode.Softlight',
-        'HARD_LIGHT': 'BlendMode.Hardlight', 'DIFFERENCE': 'BlendMode.Difference',
-        'EXCLUSION': 'BlendMode.Exclusion'
-    }
-    blend_import = 'import androidx.compose.ui.graphics.BlendMode' if blend_mode in blend_map else ''
-
-    # Effects (shadows and blurs)
-    effects = node.get('effects', [])
-    shadow_code = ''
-    blur_code = ''
-    shadow_import = ''
-    blur_import = ''
-
-    for effect in effects:
-        if not effect.get('visible', True):
-            continue
-        effect_type = effect.get('type', '')
-
-        if effect_type == 'DROP_SHADOW' and not shadow_code:
-            color = effect.get('color', {})
-            offset_x = effect.get('offset', {}).get('x', 0)
-            offset_y = effect.get('offset', {}).get('y', 0)
-            blur = effect.get('radius', 0)
-            r = int(color.get('r', 0) * 255)
-            g = int(color.get('g', 0) * 255)
-            b = int(color.get('b', 0) * 255)
-            a = color.get('a', 0.25)
-            shadow_import = 'import androidx.compose.ui.draw.shadow'
-            shadow_code = f'.shadow(elevation = {blur}.dp, shape = RoundedCornerShape({corner_radius}.dp))'
-        elif effect_type == 'LAYER_BLUR' and not blur_code:
-            blur_import = 'import androidx.compose.ui.draw.blur'
-            blur_code = f'.blur(radius = {effect.get("radius", 0)}.dp)'
-
-    layout_mode = node.get('layoutMode')
-    gap = node.get('itemSpacing', 0)
-    padding_top = node.get('paddingTop', 0)
-    padding_right = node.get('paddingRight', 0)
-    padding_bottom = node.get('paddingBottom', 0)
-    padding_left = node.get('paddingLeft', 0)
-
-    # Advanced alignment
-    primary_align = node.get('primaryAxisAlignItems', 'MIN')
-    counter_align = node.get('counterAxisAlignItems', 'MIN')
-
-    align_map = {'MIN': 'Start', 'CENTER': 'CenterHorizontally', 'MAX': 'End'}
-    v_align_map = {'MIN': 'Top', 'CENTER': 'CenterVertically', 'MAX': 'Bottom'}
-
-    # Determine container type
-    container = 'Column' if layout_mode == 'VERTICAL' else 'Row' if layout_mode == 'HORIZONTAL' else 'Box'
-
-    # Generate children
-    children_code = _generate_kotlin_children(node.get('children', []))
-
-    # Build arrangement
-    arrangement_parts = []
-    if layout_mode == 'VERTICAL':
-        if gap:
-            arrangement_parts.append(f'verticalArrangement = Arrangement.spacedBy({gap}.dp)')
-        h_align = align_map.get(counter_align, 'Start')
-        arrangement_parts.append(f'horizontalAlignment = Alignment.{h_align}')
-    elif layout_mode == 'HORIZONTAL':
-        if gap:
-            arrangement_parts.append(f'horizontalArrangement = Arrangement.spacedBy({gap}.dp)')
-        v_align = v_align_map.get(counter_align, 'Top')
-        arrangement_parts.append(f'verticalAlignment = Alignment.{v_align}')
-
-    arrangement = ',\n        '.join(arrangement_parts) if arrangement_parts else ''
-
-    # Build modifier chain
-    modifiers = [f'.width({int(width)}.dp)', f'.height({int(height)}.dp)']
-    if shadow_code:
-        modifiers.append(shadow_code)
-    if bg_code:
-        modifiers.append(bg_code)
-    if corner_code:
-        modifiers.append(corner_code)
-    if blur_code:
-        modifiers.append(blur_code)
-    if rotation_code:
-        modifiers.append(rotation_code)
-    if alpha_code:
-        modifiers.append(alpha_code)
-    modifiers.append(f'''.padding(
-                top = {padding_top}.dp,
-                end = {padding_right}.dp,
-                bottom = {padding_bottom}.dp,
-                start = {padding_left}.dp
-            )''')
-
-    modifiers_str = '\n            '.join(modifiers)
-
-    # Collect imports
-    extra_imports = [i for i in [gradient_import, rotation_import, alpha_import, shadow_import, blur_import, blend_import] if i]
-    extra_imports_str = '\n'.join(extra_imports)
-    if extra_imports_str:
-        extra_imports_str = '\n' + extra_imports_str
-
-    code = f'''package com.example.ui
-
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp{extra_imports_str}
-
-@Composable
-fun {component_name}(
-    modifier: Modifier = Modifier
-) {{
-{brush_def}    {container}(
-        modifier = modifier
-            {modifiers_str}{f''',
-        {arrangement}''' if arrangement else ''}
-    ) {{
-{children_code if children_code else '        // Content'}
-    }}
-}}
-
-@Preview
-@Composable
-fun {component_name}Preview() {{
-    {component_name}()
-}}
-'''
-    return code
-
-
-def _generate_kotlin_children(children: List[Dict[str, Any]], indent: int = 8) -> str:
-    """Generate Kotlin Compose code for children nodes."""
-    lines = []
-    prefix = ' ' * indent
-
-    for child in children[:MAX_NATIVE_CHILDREN_LIMIT]:
-        node_type = child.get('type', '')
-        name = child.get('name', 'Unknown')
-
-        if node_type == 'TEXT':
-            text = child.get('characters', name)
-            style = child.get('style', {})
-            font_size = style.get('fontSize', 16)
-            font_weight = style.get('fontWeight', 400)
-            text_case = style.get('textCase', 'ORIGINAL')
-            text_decoration = style.get('textDecoration', 'NONE')
-
-            # Get hyperlink if present
-            hyperlink = child.get('hyperlink')
-            hyperlink_url = None
-            if hyperlink and hyperlink.get('type') == 'URL':
-                hyperlink_url = hyperlink.get('url', '')
-
-            # Build Kotlin weight
-            kotlin_weight = KOTLIN_WEIGHT_MAP.get(font_weight, 'FontWeight.Normal')
-
-            # Build text decoration
-            text_dec_kotlin = 'TextDecoration.None'
-            if text_decoration == 'UNDERLINE':
-                text_dec_kotlin = 'TextDecoration.Underline'
-            elif text_decoration == 'STRIKETHROUGH':
-                text_dec_kotlin = 'TextDecoration.LineThrough'
-
-            # Apply text case transformation
-            text_expr = f'"{text}"'
-            if text_case == 'UPPER':
-                text_expr = f'"{text}".uppercase()'
-            elif text_case == 'LOWER':
-                text_expr = f'"{text}".lowercase()'
-            elif text_case == 'TITLE':
-                text_expr = f'"{text}".split(" ").joinToString(" ") {{ it.replaceFirstChar {{ c -> c.titlecase() }} }}'
-
-            # Line limits (maxLines + textTruncation)
-            max_lines = style.get('maxLines')
-            text_truncation = style.get('textTruncation', 'DISABLED')
-            overflow_mode = 'TextOverflow.Ellipsis' if text_truncation == 'ENDING' else 'TextOverflow.Clip'
-
-            # Use ClickableText with hyperlink if present
-            if hyperlink_url:
-                lines.append(f'{prefix}// Clickable link: {hyperlink_url}')
-                lines.append(f'{prefix}ClickableText(')
-                lines.append(f'{prefix}    text = AnnotatedString({text_expr}),')
-                lines.append(f'{prefix}    style = TextStyle(')
-                lines.append(f'{prefix}        fontSize = {int(font_size)}.sp,')
-                lines.append(f'{prefix}        fontWeight = {kotlin_weight},')
-                lines.append(f'{prefix}        textDecoration = {text_dec_kotlin}')
-                lines.append(f'{prefix}    ),')
-                if max_lines and max_lines > 0:
-                    lines.append(f'{prefix}    maxLines = {max_lines},')
-                    lines.append(f'{prefix}    overflow = {overflow_mode},')
-                lines.append(f'{prefix}    onClick = {{ uriHandler.openUri("{hyperlink_url}") }}')
-                lines.append(f'{prefix})')
-            else:
-                # Get paragraph spacing for modifier
-                paragraph_spacing = style.get('paragraphSpacing', 0)
-
-                lines.append(f'{prefix}Text(')
-                lines.append(f'{prefix}    text = {text_expr},')
-                if paragraph_spacing and paragraph_spacing > 0:
-                    lines.append(f'{prefix}    modifier = Modifier.padding(bottom = {int(paragraph_spacing)}.dp),')
-                lines.append(f'{prefix}    fontSize = {int(font_size)}.sp,')
-                lines.append(f'{prefix}    fontWeight = {kotlin_weight},')
-                if max_lines and max_lines > 0:
-                    lines.append(f'{prefix}    maxLines = {max_lines},')
-                    lines.append(f'{prefix}    overflow = {overflow_mode},')
-                lines.append(f'{prefix}    textDecoration = {text_dec_kotlin}')
-                lines.append(f'{prefix})')
-        elif node_type in ['FRAME', 'GROUP', 'COMPONENT', 'INSTANCE', 'RECTANGLE']:
-            bbox = child.get('absoluteBoundingBox', {})
-            w = bbox.get('width', 50)
-            h = bbox.get('height', 50)
-
-            fills = child.get('fills', [])
-            bg = ''
-            if fills and fills[0].get('type') == 'SOLID':
-                color = fills[0].get('color', {})
-                r = int(color.get('r', 0) * 255)
-                g = int(color.get('g', 0) * 255)
-                b = int(color.get('b', 0) * 255)
-                bg = f".background(Color(0xFF{r:02X}{g:02X}{b:02X}))"
-
-            lines.append(f'{prefix}// {name}')
-            lines.append(f'{prefix}Box(')
-            lines.append(f'{prefix}    modifier = Modifier')
-            lines.append(f'{prefix}        .width({int(w)}.dp)')
-            lines.append(f'{prefix}        .height({int(h)}.dp)')
-            if bg:
-                lines.append(f'{prefix}        {bg}')
-            lines.append(f'{prefix})')
-
-    return '\n'.join(lines)
-
-
-def _recursive_node_to_jsx(node: Dict[str, Any], indent: int = 6, use_tailwind: bool = True) -> str:
-    """Recursively generate detailed JSX code for nested children with all styles."""
-    lines = []
-    prefix = ' ' * indent
-    node_type = node.get('type', '')
-    name = node.get('name', 'Unknown')
-
-    # Get all styles
-    bbox = node.get('absoluteBoundingBox', {})
-    width = int(bbox.get('width', 0))
-    height = int(bbox.get('height', 0))
-
-    # Fills (with gradient support)
-    fills = node.get('fills', [])
-    bg_value, bg_type = _get_background_css(node)
-
-    # Strokes (comprehensive)
-    stroke_data = _extract_stroke_data(node)
-    stroke_color = ''
-    stroke_weight = stroke_data['weight'] if stroke_data else 0
-    stroke_align = stroke_data['align'] if stroke_data else 'INSIDE'
-    if stroke_data and stroke_data['colors']:
-        first_stroke = stroke_data['colors'][0]
-        if first_stroke.get('type') == 'SOLID':
-            stroke_color = first_stroke.get('color', '')
-
-    # Effects (shadows and blurs)
-    effects_data = _extract_effects_data(node)
-    shadow_css = ''
-    blur_css = ''
-    if effects_data['shadows']:
-        shadow_parts = []
-        for shadow in effects_data['shadows']:
-            offset = shadow.get('offset', {'x': 0, 'y': 0})
-            shadow_parts.append(
-                f"{int(offset.get('x', 0))}px {int(offset.get('y', 0))}px {int(shadow.get('radius', 0))}px {int(shadow.get('spread', 0))}px {shadow.get('color', '#000')}"
-            )
-        shadow_css = ', '.join(shadow_parts)
-    if effects_data['blurs']:
-        for blur in effects_data['blurs']:
-            if blur.get('type') == 'LAYER_BLUR':
-                blur_css = f"blur({int(blur.get('radius', 0))}px)"
-            elif blur.get('type') == 'BACKGROUND_BLUR':
-                blur_css = f"blur({int(blur.get('radius', 0))}px)"
-
-    # Corner radius (with individual corners support)
-    corner_radius_css = _corner_radii_to_css(node)
-
-    # Transform (rotation, scale)
-    transform_css = _transform_to_css(node)
-
-    # Blend mode
-    blend_mode = node.get('blendMode', 'PASS_THROUGH')
-    blend_mode_css = _blend_mode_to_css(blend_mode)
-
-    # Opacity
-    opacity = node.get('opacity', 1)
-
-    # Layout
-    layout_mode = node.get('layoutMode')
-    gap = node.get('itemSpacing', 0)
-    padding_top = node.get('paddingTop', 0)
-    padding_right = node.get('paddingRight', 0)
-    padding_bottom = node.get('paddingBottom', 0)
-    padding_left = node.get('paddingLeft', 0)
-
-    # Alignment
-    primary_align = node.get('primaryAxisAlignItems', 'MIN')
-    counter_align = node.get('counterAxisAlignItems', 'MIN')
-
-    if node_type == 'TEXT':
-        text = node.get('characters', name)
-        style = node.get('style', {})
-        font_size = style.get('fontSize', 16)
-        font_weight = style.get('fontWeight', 400)
-        font_family = style.get('fontFamily', '')
-        line_height = style.get('lineHeightPx')
-        letter_spacing = style.get('letterSpacing', 0)
-        text_align = style.get('textAlignHorizontal', 'LEFT').lower()
-        text_case = style.get('textCase', 'ORIGINAL')
-        text_decoration = style.get('textDecoration', 'NONE')
-
-        # Get hyperlink if present
-        hyperlink = node.get('hyperlink')
-        hyperlink_url = None
-        if hyperlink and hyperlink.get('type') == 'URL':
-            hyperlink_url = hyperlink.get('url', '')
-
-        # Get text color from fills
-        text_color = ''
-        if fills and fills[0].get('type') == 'SOLID' and fills[0].get('visible', True):
-            text_color = _rgba_to_hex(fills[0].get('color', {}))
-
-        # Convert text case and decoration to CSS
-        text_transform = _text_case_to_css(text_case)
-        text_dec_value = _text_decoration_to_css(text_decoration)
-
-        if use_tailwind:
-            weight_class = TAILWIND_WEIGHT_MAP.get(font_weight, 'font-normal')
-            align_class = TAILWIND_ALIGN_MAP.get(text_align.upper(), '')
-
-            # Tailwind text-transform classes
-            transform_map = {'uppercase': 'uppercase', 'lowercase': 'lowercase', 'capitalize': 'capitalize'}
-            transform_class = transform_map.get(text_transform, '') if text_transform else ''
-
-            # Tailwind text-decoration classes
-            decoration_map = {'underline': 'underline', 'line-through': 'line-through'}
-            decoration_class = decoration_map.get(text_dec_value, '') if text_dec_value else ''
-
-            classes = [f'text-[{int(font_size)}px]', weight_class]
-            if text_color:
-                classes.append(f'text-[{text_color}]')
-            if line_height:
-                classes.append(f'leading-[{int(line_height)}px]')
-            if letter_spacing:
-                classes.append(f'tracking-[{letter_spacing:.2f}px]')
-            if align_class:
-                classes.append(align_class)
-            if transform_class:
-                classes.append(transform_class)
-            if decoration_class:
-                classes.append(decoration_class)
-
-            # Line clamp (maxLines + textTruncation)
-            max_lines = style.get('maxLines')
-            text_truncation = style.get('textTruncation', 'DISABLED')
-            if max_lines and max_lines > 0:
-                classes.append(f'line-clamp-{max_lines}')
-                if text_truncation == 'ENDING':
-                    classes.append('text-ellipsis')
-
-            # Paragraph spacing (margin-bottom)
-            paragraph_spacing = style.get('paragraphSpacing', 0)
-            if paragraph_spacing and paragraph_spacing > 0:
-                classes.append(f'mb-[{int(paragraph_spacing)}px]')
-
-            class_str = ' '.join(filter(None, classes))
-            # Escape text for JSX
-            escaped_text = text.replace('{', '{{').replace('}', '}}').replace('<', '&lt;').replace('>', '&gt;')
-
-            # Wrap in anchor tag if hyperlink present
-            if hyperlink_url:
-                lines.append(f'{prefix}<a href="{hyperlink_url}" className="{class_str}" target="_blank" rel="noopener noreferrer">{escaped_text}</a>')
-            else:
-                lines.append(f'{prefix}<span className="{class_str}">{escaped_text}</span>')
-        else:
-            styles = [f"fontSize: '{int(font_size)}px'", f"fontWeight: {font_weight}"]
-            if text_color:
-                styles.append(f"color: '{text_color}'")
-            if font_family:
-                styles.append(f"fontFamily: '{font_family}'")
-            if line_height:
-                styles.append(f"lineHeight: '{int(line_height)}px'")
-            if letter_spacing:
-                styles.append(f"letterSpacing: '{letter_spacing:.2f}px'")
-            if text_align != 'left':
-                styles.append(f"textAlign: '{text_align}'")
-            if text_transform:
-                styles.append(f"textTransform: '{text_transform}'")
-            if text_dec_value:
-                styles.append(f"textDecoration: '{text_dec_value}'")
-
-            # Line clamp (maxLines + textTruncation)
-            max_lines = style.get('maxLines')
-            text_truncation = style.get('textTruncation', 'DISABLED')
-            if max_lines and max_lines > 0:
-                styles.append("display: '-webkit-box'")
-                styles.append(f"WebkitLineClamp: {max_lines}")
-                styles.append("WebkitBoxOrient: 'vertical'")
-                styles.append("overflow: 'hidden'")
-                if text_truncation == 'ENDING':
-                    styles.append("textOverflow: 'ellipsis'")
-
-            # Paragraph spacing (margin-bottom)
-            paragraph_spacing = style.get('paragraphSpacing', 0)
-            if paragraph_spacing and paragraph_spacing > 0:
-                styles.append(f"marginBottom: '{int(paragraph_spacing)}px'")
-
-            style_str = ', '.join(styles)
-            escaped_text = text.replace('{', '{{').replace('}', '}}').replace('<', '&lt;').replace('>', '&gt;')
-
-            # Wrap in anchor tag if hyperlink present
-            if hyperlink_url:
-                lines.append(f'{prefix}<a href="{hyperlink_url}" style={{{{ {style_str} }}}} target="_blank" rel="noopener noreferrer">{escaped_text}</a>')
-            else:
-                lines.append(f'{prefix}<span style={{{{ {style_str} }}}}>{escaped_text}</span>')
-
-    elif node_type == 'VECTOR' or node_type == 'BOOLEAN_OPERATION':
-        # For vector/icon nodes, create a placeholder or use SVG
-        if use_tailwind:
-            classes = []
-            if width:
-                classes.append(f'w-[{width}px]')
-            if height:
-                classes.append(f'h-[{height}px]')
-            if bg_value and bg_type == 'color':
-                classes.append(f'bg-[{bg_value}]')
-            class_str = ' '.join(filter(None, classes))
-            lines.append(f'{prefix}{{/* Icon: {name} */}}')
-            lines.append(f'{prefix}<div className="{class_str}" />')
-        else:
-            styles = []
-            if width:
-                styles.append(f"width: '{width}px'")
-            if height:
-                styles.append(f"height: '{height}px'")
-            if bg_value and bg_type == 'color':
-                styles.append(f"backgroundColor: '{bg_value}'")
-            style_str = ', '.join(styles) if styles else "width: '0px'"
-            lines.append(f'{prefix}{{/* Icon: {name} */}}')
-            lines.append(f'{prefix}<div style={{{{ {style_str} }}}} />')
-
-    else:
-        # Container element (FRAME, GROUP, COMPONENT, INSTANCE, RECTANGLE, etc.)
-        if use_tailwind:
-            classes = []
-            inline_styles = []  # For properties that can't be expressed in Tailwind alone
-
-            if width:
-                classes.append(f'w-[{width}px]')
-            if height:
-                classes.append(f'h-[{height}px]')
-
-            # Background (solid color, gradient, image, or layered)
-            if bg_value and bg_type:
-                if bg_type == 'color':
-                    classes.append(f'bg-[{bg_value}]')
-                elif bg_type in ('gradient', 'image', 'layered'):
-                    # Gradients, images, and layered backgrounds need inline style
-                    inline_styles.append(f"background: '{bg_value}'")
-
-            # Corner radius (with individual corners)
-            if corner_radius_css:
-                classes.append(f'rounded-[{corner_radius_css}]')
-
-            # Strokes
-            if stroke_color and stroke_weight:
-                classes.append(f'border-[{stroke_weight}px]')
-                classes.append(f'border-[{stroke_color}]')
-                # Border position (only INSIDE is default in CSS)
-                if stroke_align == 'OUTSIDE':
-                    inline_styles.append("boxSizing: 'content-box'")
-
-            # Shadows
-            if shadow_css:
-                classes.append(f'shadow-[{shadow_css}]')
-
-            # Blur filter
-            if blur_css:
-                inline_styles.append(f"filter: '{blur_css}'")
-
-            # Transform (rotation, scale)
-            if transform_css:
-                inline_styles.append(f"transform: '{transform_css}'")
-
-            # Blend mode
-            if blend_mode_css:
-                classes.append(f'mix-blend-{blend_mode_css}')
-
-            # Opacity
-            if opacity < 1:
-                classes.append(f'opacity-[{opacity}]')
-
-            # Layout
-            if layout_mode:
-                classes.append('flex')
-                classes.append('flex-col' if layout_mode == 'VERTICAL' else 'flex-row')
-                if gap:
-                    classes.append(f'gap-[{gap}px]')
-                # Alignment
-                justify_map = {'MIN': 'justify-start', 'CENTER': 'justify-center', 'MAX': 'justify-end', 'SPACE_BETWEEN': 'justify-between'}
-                items_map = {'MIN': 'items-start', 'CENTER': 'items-center', 'MAX': 'items-end'}
-                classes.append(justify_map.get(primary_align, ''))
-                classes.append(items_map.get(counter_align, ''))
-
-            # Padding
-            if padding_top or padding_right or padding_bottom or padding_left:
-                if padding_top:
-                    classes.append(f'pt-[{padding_top}px]')
-                if padding_right:
-                    classes.append(f'pr-[{padding_right}px]')
-                if padding_bottom:
-                    classes.append(f'pb-[{padding_bottom}px]')
-                if padding_left:
-                    classes.append(f'pl-[{padding_left}px]')
-
-            # Flex child properties (layoutGrow, layoutPositioning, layoutAlign)
-            layout_grow = node.get('layoutGrow', 0)
-            layout_positioning = node.get('layoutPositioning')
-            layout_align = node.get('layoutAlign')
-
-            if layout_grow and layout_grow > 0:
-                classes.append('grow')  # Tailwind: flex-grow: 1
-            if layout_positioning == 'ABSOLUTE':
-                classes.append('absolute')
-            if layout_align == 'STRETCH':
-                classes.append('self-stretch')
-            elif layout_align == 'INHERIT':
-                classes.append('self-auto')
-
-            class_str = ' '.join(filter(None, classes))
-
-            # Combine className and style if needed
-            if inline_styles:
-                style_str = ', '.join(inline_styles)
-                lines.append(f'{prefix}<div className="{class_str}" style={{{{ {style_str} }}}}>')
-            else:
-                lines.append(f'{prefix}<div className="{class_str}">')
-        else:
-            styles = []
-            if width:
-                styles.append(f"width: '{width}px'")
-            if height:
-                styles.append(f"height: '{height}px'")
-
-            # Background (solid color, gradient, image, or layered)
-            if bg_value and bg_type:
-                if bg_type == 'color':
-                    styles.append(f"backgroundColor: '{bg_value}'")
-                elif bg_type in ('gradient', 'image', 'layered'):
-                    # Gradients, images, and layered backgrounds use 'background' shorthand
-                    styles.append(f"background: '{bg_value}'")
-
-            # Corner radius (with individual corners)
-            if corner_radius_css:
-                styles.append(f"borderRadius: '{corner_radius_css}'")
-
-            # Strokes
-            if stroke_color and stroke_weight:
-                styles.append(f"border: '{stroke_weight}px solid {stroke_color}'")
-                if stroke_align == 'OUTSIDE':
-                    styles.append("boxSizing: 'content-box'")
-
-            # Shadows
-            if shadow_css:
-                styles.append(f"boxShadow: '{shadow_css}'")
-
-            # Blur filter
-            if blur_css:
-                styles.append(f"filter: '{blur_css}'")
-
-            # Transform (rotation, scale)
-            if transform_css:
-                styles.append(f"transform: '{transform_css}'")
-
-            # Blend mode
-            if blend_mode_css:
-                styles.append(f"mixBlendMode: '{blend_mode_css}'")
-
-            # Opacity
-            if opacity < 1:
-                styles.append(f"opacity: {opacity}")
-
-            # Layout
-            if layout_mode:
-                styles.append("display: 'flex'")
-                styles.append(f"flexDirection: '{'column' if layout_mode == 'VERTICAL' else 'row'}'")
-                if gap:
-                    styles.append(f"gap: '{gap}px'")
-                # Alignment
-                justify_map = {'MIN': 'flex-start', 'CENTER': 'center', 'MAX': 'flex-end', 'SPACE_BETWEEN': 'space-between'}
-                items_map = {'MIN': 'flex-start', 'CENTER': 'center', 'MAX': 'flex-end'}
-                styles.append(f"justifyContent: '{justify_map.get(primary_align, 'flex-start')}'")
-                styles.append(f"alignItems: '{items_map.get(counter_align, 'flex-start')}'")
-
-            # Padding
-            if padding_top or padding_right or padding_bottom or padding_left:
-                styles.append(f"padding: '{padding_top}px {padding_right}px {padding_bottom}px {padding_left}px'")
-
-            # Flex child properties (layoutGrow, layoutPositioning, layoutAlign)
-            layout_grow = node.get('layoutGrow', 0)
-            layout_positioning = node.get('layoutPositioning')
-            layout_align = node.get('layoutAlign')
-
-            if layout_grow and layout_grow > 0:
-                styles.append(f"flexGrow: {layout_grow}")
-            if layout_positioning == 'ABSOLUTE':
-                styles.append("position: 'absolute'")
-            if layout_align == 'STRETCH':
-                styles.append("alignSelf: 'stretch'")
-            elif layout_align == 'INHERIT':
-                styles.append("alignSelf: 'auto'")
-
-            style_str = ', '.join(styles)
-            lines.append(f'{prefix}<div style={{{{ {style_str} }}}}>')
-
-        # Recursively add children
-        children = node.get('children', [])
-        for child in children[:MAX_CHILDREN_LIMIT]:  # Limit to 20 children for safety
-            child_jsx = _recursive_node_to_jsx(child, indent + 2, use_tailwind)
-            if child_jsx:
-                lines.append(child_jsx)
-
-        lines.append(f'{prefix}</div>')
-
-    return '\n'.join(lines)
-
-
 # ============================================================================
 # MCP Tools
 # ============================================================================
 
-@mcp.tool(
+@_versioned_tool(
     name="figma_get_file_structure",
     annotations={
         "title": "Get Figma File Structure",
@@ -4446,7 +3138,7 @@ async def figma_get_file_structure(params: FigmaFileInput) -> str:
         return _handle_api_error(e)
 
 
-@mcp.tool(
+@_versioned_tool(
     name="figma_get_node_details",
     annotations={
         "title": "Get Figma Node Details",
@@ -4590,9 +3282,9 @@ async def figma_get_node_details(params: FigmaNodeInput) -> str:
         if constraints:
             node_details['constraints'] = constraints
 
-        # Transform
+        # Transform (includes rotation, scale, flip detection)
         transform = _extract_transform(node)
-        if transform.get('rotation') or transform.get('preserveRatio'):
+        if transform.get('rotation') or transform.get('preserveRatio') or transform.get('flippedHorizontally') or transform.get('flippedVertically'):
             node_details['transform'] = transform
 
         # Clip content
@@ -4661,7 +3353,8 @@ async def figma_get_node_details(params: FigmaNodeInput) -> str:
             node_details['text'] = {k: v for k, v in node_details['text'].items() if v is not None}
 
         # Implementation hints (AI-friendly guidance)
-        impl_hints = _generate_implementation_hints(node, interactions)
+        hint_framework = params.framework or 'css'
+        impl_hints = _generate_implementation_hints(node, interactions, framework=hint_framework)
         if impl_hints:
             node_details['implementationHints'] = impl_hints
 
@@ -4670,10 +3363,11 @@ async def figma_get_node_details(params: FigmaNodeInput) -> str:
         if a11y_issues:
             node_details['accessibility'] = a11y_issues
 
-        # Children count
+        # Children with depth-2 traversal
         children = node.get('children', [])
         if children:
             node_details['childrenCount'] = len(children)
+            node_details['children'] = _extract_children_summary(children, depth=0, max_depth=2)
 
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(node_details, indent=2)
@@ -4718,7 +3412,13 @@ async def figma_get_node_details(params: FigmaNodeInput) -> str:
             for fill in node_details['fills']:
                 fill_type = fill.get('fillType', 'SOLID')
                 if fill_type == 'SOLID':
-                    lines.append(f"- **Solid:** {fill.get('color')} (opacity: {fill.get('opacity', 1):.2f})")
+                    fill_op = fill.get('opacity', 1)
+                    node_op = node_details.get('opacity', 1)
+                    effective_op = fill_op * node_op
+                    opacity_info = f"opacity: {fill_op:.2f}"
+                    if node_op < 1:
+                        opacity_info += f" × node:{node_op:.2f} = effective:{effective_op:.2f}"
+                    lines.append(f"- **Solid:** {fill.get('color')} ({opacity_info})")
                 elif fill_type.startswith('GRADIENT_'):
                     gradient = fill.get('gradient', {})
                     stops = gradient.get('stops', [])
@@ -4733,20 +3433,32 @@ async def figma_get_node_details(params: FigmaNodeInput) -> str:
                 elif fill_type == 'IMAGE':
                     image = fill.get('image', {})
                     lines.append(f"- **Image:** ref={image.get('imageRef')}, scale={image.get('scaleMode')}")
+            bg_css = _build_css_ready_background(node_details['fills'], 1.0)
+            if bg_css:
+                prop_name = 'color' if node_details.get('type') == 'TEXT' else 'background'
+                lines.append(f"- **CSS:** `{prop_name}: {bg_css};`")
             lines.append("")
 
         # Strokes
         if 'strokes' in node_details:
             s = node_details['strokes']
+            weight = s['weight']
+            dashes = s.get('dashes', [])
+            style = 'dashed' if dashes else 'solid'
             lines.append("## Strokes")
-            lines.append(f"- **Weight:** {s['weight']}px")
+            lines.append(f"- **Weight:** {weight}px")
             lines.append(f"- **Align:** {s['align']}")
             lines.append(f"- **Cap:** {s['cap']}, **Join:** {s['join']}")
-            if s.get('dashes'):
-                lines.append(f"- **Dashes:** {s['dashes']}")
+            if dashes:
+                lines.append(f"- **Dashes:** {dashes}")
+            if s.get('individualWeights'):
+                iw = s['individualWeights']
+                lines.append(f"- **Individual Weights:** T:{iw.get('top', weight)} R:{iw.get('right', weight)} B:{iw.get('bottom', weight)} L:{iw.get('left', weight)}")
             for color in s.get('colors', []):
                 if color.get('type') == 'SOLID':
-                    lines.append(f"- **Color:** {color.get('color')}")
+                    hex_c = color.get('hex', color.get('color'))
+                    lines.append(f"- **Color:** {hex_c}")
+                    lines.append(f"  - `border: {weight}px {style} {hex_c};`")
                 elif color.get('type', '').startswith('GRADIENT_'):
                     lines.append(f"- **Gradient stroke**")
             lines.append("")
@@ -4754,15 +3466,21 @@ async def figma_get_node_details(params: FigmaNodeInput) -> str:
         # Corner radius
         if 'cornerRadius' in node_details:
             cr = node_details['cornerRadius']
+            tl = int(cr.get('topLeft', 0))
+            tr = int(cr.get('topRight', 0))
+            br = int(cr.get('bottomRight', 0))
+            bl = int(cr.get('bottomLeft', 0))
             if cr.get('isUniform'):
-                lines.append(f"## Border Radius: {cr['topLeft']}px\n")
+                css_val = f"{tl}px"
+            else:
+                css_val = f"{tl}px {tr}px {br}px {bl}px"
+            if cr.get('isUniform'):
+                lines.append(f"## Border Radius: {tl}px → `border-radius: {css_val}`\n")
             else:
                 lines.extend([
                     "## Border Radius",
-                    f"- **Top Left:** {cr['topLeft']}px",
-                    f"- **Top Right:** {cr['topRight']}px",
-                    f"- **Bottom Right:** {cr['bottomRight']}px",
-                    f"- **Bottom Left:** {cr['bottomLeft']}px",
+                    f"- **Top Left:** {tl}px, **Top Right:** {tr}px, **Bottom Right:** {br}px, **Bottom Left:** {bl}px",
+                    f"- `border-radius: {css_val}`",
                     ""
                 ])
 
@@ -4777,26 +3495,49 @@ async def figma_get_node_details(params: FigmaNodeInput) -> str:
                         f"offset ({offset['x']}, {offset['y']}), "
                         f"blur {shadow['radius']}px, spread {shadow['spread']}px"
                     )
+                    inset = 'inset ' if shadow['type'] == 'INNER_SHADOW' else ''
+                    ox = int(offset.get('x', 0))
+                    oy = int(offset.get('y', 0))
+                    r = int(shadow['radius'])
+                    sp = int(shadow['spread'])
+                    lines.append(
+                        f"  - `box-shadow: {inset}{ox}px {oy}px {r}px {sp}px {shadow.get('hex', shadow['color'])};`"
+                    )
             if node_details['effects'].get('blurs'):
                 for blur in node_details['effects']['blurs']:
                     lines.append(f"- **{blur['type']}:** {blur['radius']}px")
+                    if blur['type'] == 'LAYER_BLUR':
+                        lines.append(f"  - `filter: blur({int(blur['radius'])}px);`")
+                    elif blur['type'] == 'BACKGROUND_BLUR':
+                        lines.append(f"  - `backdrop-filter: blur({int(blur['radius'])}px);`")
             lines.append("")
 
         # Auto-layout
         if 'autoLayout' in node_details:
             al = node_details['autoLayout']
+            mode = al['mode']
+            direction = 'row' if mode == 'HORIZONTAL' else 'column'
+            p = al['padding']
+            t, r, b, l = int(p['top']), int(p['right']), int(p['bottom']), int(p['left'])
+            if t == r == b == l:
+                padding_css = f"{t}px" if t > 0 else "0"
+            elif t == b and r == l:
+                padding_css = f"{t}px {r}px"
+            else:
+                padding_css = f"{t}px {r}px {b}px {l}px"
+            align_map = {'MIN': 'flex-start', 'CENTER': 'center', 'MAX': 'flex-end', 'SPACE_BETWEEN': 'space-between'}
             lines.extend([
                 "## Auto Layout",
-                f"- **Direction:** {al['mode']}",
-                f"- **Gap:** {al['gap']}px",
-                f"- **Padding:** T:{al['padding']['top']} R:{al['padding']['right']} B:{al['padding']['bottom']} L:{al['padding']['left']}",
-                f"- **Primary Align:** {al['primaryAxisAlign']}",
-                f"- **Counter Align:** {al['counterAxisAlign']}",
+                f"- **Direction:** {mode} → `flex-direction: {direction}`",
+                f"- **Gap:** {al['gap']}px → `gap: {int(al['gap'])}px`",
+                f"- **Padding:** T:{t} R:{r} B:{b} L:{l} → `padding: {padding_css}`",
+                f"- **Primary Align:** {al['primaryAxisAlign']} → `justify-content: {align_map.get(al['primaryAxisAlign'], 'flex-start')}`",
+                f"- **Counter Align:** {al['counterAxisAlign']} → `align-items: {align_map.get(al['counterAxisAlign'], 'flex-start')}`",
                 f"- **Primary Sizing:** {al['primaryAxisSizing']}",
                 f"- **Counter Sizing:** {al['counterAxisSizing']}",
             ])
             if al.get('layoutWrap') != 'NO_WRAP':
-                lines.append(f"- **Wrap:** {al['layoutWrap']}")
+                lines.append(f"- **Wrap:** {al['layoutWrap']} → `flex-wrap: wrap`")
             lines.append("")
 
         # Constraints
@@ -4831,6 +3572,10 @@ async def figma_get_node_details(params: FigmaNodeInput) -> str:
                 lines.append(f"- **Rotation:** {t['rotation']}°")
             if t.get('preserveRatio'):
                 lines.append(f"- **Preserve Ratio:** Yes")
+            if t.get('flippedHorizontally'):
+                lines.append(f"- **Flipped Horizontally:** Yes (scaleX: -1)")
+            if t.get('flippedVertically'):
+                lines.append(f"- **Flipped Vertically:** Yes (scaleY: -1)")
             lines.append("")
 
         # Clip content
@@ -4887,7 +3632,29 @@ async def figma_get_node_details(params: FigmaNodeInput) -> str:
                 lines.append(f"- **Decoration:** {txt['textDecoration']}")
             if txt.get('textAutoResize'):
                 lines.append(f"- **Auto Resize:** {txt['textAutoResize']}")
+            if txt.get('fontFamily') and txt.get('fontSize'):
+                w = int(txt.get('fontWeight', 400))
+                sz = int(txt['fontSize'])
+                lh = f"/{int(txt['lineHeight'])}px" if txt.get('lineHeight') else ''
+                fam = txt['fontFamily']
+                lines.append(f"- **CSS:** `font: {w} {sz}px{lh} '{fam}', sans-serif;`")
             lines.append("")
+
+        # CSS Ready Section (only for CSS-based frameworks)
+        hint_framework = params.framework or 'css'
+        if hint_framework not in ('swiftui', 'kotlin'):
+            css_ready = _build_css_ready_section(node_details)
+            if css_ready:
+                lines.append("## CSS Ready")
+                lines.append("```css")
+                css_props = {k: v for k, v in css_ready.items() if not k.endswith('-note')}
+                for prop, value in css_props.items():
+                    lines.append(f"  {prop}: {value};")
+                lines.append("```")
+                notes = {k: v for k, v in css_ready.items() if k.endswith('-note')}
+                for note_key, note_value in notes.items():
+                    lines.append(f"> Note: {note_value}")
+                lines.append("")
 
         # Implementation Hints
         if 'implementationHints' in node_details:
@@ -4941,8 +3708,12 @@ async def figma_get_node_details(params: FigmaNodeInput) -> str:
                         lines.append(f"  - WCAG: {issue['wcag']}")
             lines.append("")
 
-        # Children count
-        if 'childrenCount' in node_details:
+        # Children
+        if 'children' in node_details:
+            lines.append(f"## Children ({node_details.get('childrenCount', 0)} nodes)")
+            lines.append("")
+            _render_children_markdown(lines, node_details['children'], indent=0)
+        elif 'childrenCount' in node_details:
             lines.append(f"**Children:** {node_details['childrenCount']} child node(s)")
 
         return "\n".join(lines)
@@ -4951,7 +3722,7 @@ async def figma_get_node_details(params: FigmaNodeInput) -> str:
         return _handle_api_error(e)
 
 
-@mcp.tool(
+@_versioned_tool(
     name="figma_get_screenshot",
     annotations={
         "title": "Get Figma Screenshot",
@@ -5048,7 +3819,7 @@ async def figma_get_screenshot(params: FigmaScreenshotInput) -> str:
         return _handle_api_error(e)
 
 
-@mcp.tool(
+@_versioned_tool(
     name="figma_get_design_tokens",
     annotations={
         "title": "Extract Design Tokens",
@@ -5171,11 +3942,34 @@ async def figma_get_design_tokens(params: FigmaDesignTokensInput) -> str:
 
         # Check character limit
         if len(result) > CHARACTER_LIMIT:
-            return json.dumps({
-                'truncated': True,
-                'message': f'Result exceeded {CHARACTER_LIMIT} characters. Try specifying a node_id to narrow scope.',
-                'tokens': {k: v[:10] for k, v in tokens.items()} if tokens else {}
-            }, indent=2)
+            # Step 1: Remove generated code (CSS/SCSS/Tailwind) - usually the biggest chunk
+            if 'generated' in formatted_tokens:
+                del formatted_tokens['generated']
+                result = json.dumps(formatted_tokens, indent=2)
+
+            # Step 2: If still too large, limit each token category
+            if len(result) > CHARACTER_LIMIT:
+                max_per_category = 100
+                if isinstance(formatted_tokens.get('tokens'), dict):
+                    for key in formatted_tokens['tokens']:
+                        if isinstance(formatted_tokens['tokens'][key], list) and len(formatted_tokens['tokens'][key]) > max_per_category:
+                            total = len(formatted_tokens['tokens'][key])
+                            formatted_tokens['tokens'][key] = formatted_tokens['tokens'][key][:max_per_category]
+                            formatted_tokens['tokens'][key].append({
+                                '_truncated': True,
+                                '_message': f'{total - max_per_category} more items. Use node_id to narrow scope.'
+                            })
+                result = json.dumps(formatted_tokens, indent=2)
+
+            # Step 3: If STILL too large, hard truncate with message
+            if len(result) > CHARACTER_LIMIT:
+                formatted_tokens['_warning'] = f'Result truncated from {len(result)} chars. Use node_id parameter to narrow scope.'
+                # Keep only first 20 of each
+                if isinstance(formatted_tokens.get('tokens'), dict):
+                    for key in formatted_tokens['tokens']:
+                        if isinstance(formatted_tokens['tokens'][key], list):
+                            formatted_tokens['tokens'][key] = formatted_tokens['tokens'][key][:20]
+                result = json.dumps(formatted_tokens, indent=2)
 
         return result
 
@@ -5183,7 +3977,7 @@ async def figma_get_design_tokens(params: FigmaDesignTokensInput) -> str:
         return _handle_api_error(e)
 
 
-@mcp.tool(
+@_versioned_tool(
     name="figma_get_styles",
     annotations={
         "title": "Get Published Styles",
@@ -5426,7 +4220,7 @@ async def figma_get_styles(params: FigmaStylesInput) -> str:
         return _handle_api_error(e)
 
 
-@mcp.tool(
+@_versioned_tool(
     name="figma_generate_code",
     annotations={
         "title": "Generate Code from Figma",
@@ -5464,18 +4258,24 @@ async def figma_generate_code(params: FigmaCodeGenInput) -> str:
         str: Generated code in the requested framework
     """
     try:
-        # Use full file endpoint to get all nested children
-        data = await _make_figma_request(f"files/{params.file_key}")
-        node = _get_node_with_children(params.file_key, params.node_id, data)
+        # Use nodes endpoint to get full node tree with all properties
+        # (files endpoint may omit relativeTransform needed for flip detection)
+        if params.node_id:
+            data = await _make_figma_request(
+                f"files/{params.file_key}/nodes",
+                params={"ids": params.node_id}
+            )
+            nodes = data.get('nodes', {})
+            node = nodes.get(params.node_id, {}).get('document', {})
+        else:
+            data = await _make_figma_request(f"files/{params.file_key}")
+            node = data.get('document', {})
 
         if not node:
             return f"Error: Node '{params.node_id}' not found."
 
         # Generate component name
-        component_name = params.component_name or node.get('name', 'Component')
-        component_name = re.sub(r'[^a-zA-Z0-9]', '', component_name.title())
-        if not component_name[0].isalpha():
-            component_name = 'Component' + component_name
+        component_name = params.component_name or _sanitize_component_name(node.get('name', 'Component'))
 
         # Generate code based on framework
         if params.framework in [CodeFramework.REACT, CodeFramework.REACT_TAILWIND]:
@@ -5496,7 +4296,8 @@ async def figma_generate_code(params: FigmaCodeGenInput) -> str:
         elif params.framework == CodeFramework.SCSS:
             code = _generate_scss_code(node, component_name)
         elif params.framework == CodeFramework.SWIFTUI:
-            code = _generate_swiftui_code(node, component_name)
+            from generators.swiftui_generator import generate_swiftui_code
+            code = generate_swiftui_code(node, component_name)
         elif params.framework == CodeFramework.KOTLIN:
             code = _generate_kotlin_code(node, component_name)
         else:
@@ -5526,7 +4327,7 @@ async def figma_generate_code(params: FigmaCodeGenInput) -> str:
             f"**Framework:** {params.framework.value}",
             f"**Source Node:** `{params.node_id}`",
             "",
-            "```" + ("tsx" if "react" in params.framework.value else "vue" if "vue" in params.framework.value else "html"),
+            "```" + {"react": "tsx", "react_tailwind": "tsx", "vue": "vue", "vue_tailwind": "vue", "swiftui": "swift", "kotlin": "kotlin", "css": "css", "scss": "scss"}.get(params.framework.value, "html"),
             code,
             "```"
         ]
@@ -5541,7 +4342,7 @@ async def figma_generate_code(params: FigmaCodeGenInput) -> str:
 # Code Connect Tools
 # ============================================================================
 
-@mcp.tool(
+@_versioned_tool(
     name="figma_get_code_connect_map",
     annotations={
         "title": "Get Code Connect Mappings",
@@ -5617,7 +4418,7 @@ async def figma_get_code_connect_map(params: FigmaCodeConnectGetInput) -> str:
         }, indent=2)
 
 
-@mcp.tool(
+@_versioned_tool(
     name="figma_add_code_connect_map",
     annotations={
         "title": "Add Code Connect Mapping",
@@ -5702,7 +4503,7 @@ async def figma_add_code_connect_map(params: FigmaCodeConnectAddInput) -> str:
         }, indent=2)
 
 
-@mcp.tool(
+@_versioned_tool(
     name="figma_remove_code_connect_map",
     annotations={
         "title": "Remove Code Connect Mapping",
@@ -5770,7 +4571,7 @@ async def figma_remove_code_connect_map(params: FigmaCodeConnectRemoveInput) -> 
 # Asset Management Tools
 # ============================================================================
 
-@mcp.tool(
+@_versioned_tool(
     name="figma_list_assets",
     annotations={
         "title": "List Assets in Figma Design",
@@ -5942,7 +4743,7 @@ async def figma_list_assets(params: FigmaListAssetsInput) -> str:
         return _handle_api_error(e)
 
 
-@mcp.tool(
+@_versioned_tool(
     name="figma_get_images",
     annotations={
         "title": "Get Image Fill URLs",
@@ -6079,7 +4880,7 @@ async def figma_get_images(params: FigmaGetImagesInput) -> str:
         return _handle_api_error(e)
 
 
-@mcp.tool(
+@_versioned_tool(
     name="figma_export_assets",
     annotations={
         "title": "Export Assets from Figma",
