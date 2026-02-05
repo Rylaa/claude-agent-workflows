@@ -28,6 +28,11 @@ Load these references when needed:
 - Illustration detection: `illustration-detection.md` → Glob: `**/references/illustration-detection.md`
 - Image with text: `image-with-text.md` → Glob: `**/references/image-with-text.md`
 - Error recovery: `error-recovery.md` → Glob: `**/references/error-recovery.md`
+- Layer order & hierarchy: `layer-order-hierarchy.md` → Glob: `**/references/layer-order-hierarchy.md`
+- Font handling: `font-handling.md` → Glob: `**/references/font-handling.md`
+- Text decoration: `text-decoration.md` → Glob: `**/references/text-decoration.md`
+- Inline text variations: `inline-text-variations.md` → Glob: `**/references/inline-text-variations.md`
+- Asset classification: `asset-classification-guide.md` → Glob: `**/references/asset-classification-guide.md`
 
 # Design Validator Agent
 
