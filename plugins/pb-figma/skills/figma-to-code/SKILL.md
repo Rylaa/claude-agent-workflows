@@ -82,16 +82,51 @@ Task(subagent_type="pb-figma:font-manager",
      run_in_background=True)
 
 # Step 4: Code Generator (after asset-manager completes; font-manager continues in background)
-# Option A: Sequential (≤3 components or simple designs)
+
+## Component Count Check
+# Read the spec's Component Hierarchy to count top-level components.
+
+## Option A: Sequential (≤3 components)
 Task(subagent_type="pb-figma:code-generator-{framework}",
      prompt="Generate code from spec: docs/figma-reports/{file_key}-spec.md")
 
-# Option B: Fan-Out (>3 components — significantly faster)
-# Read spec to get component list, then spawn parallel tasks:
-# for batch in chunk(components, batch_size=4):
-#     Task(subagent_type="pb-figma:code-generator-{framework}",
-#          prompt="Generate ONLY these components: {batch}. "
-#                 "Read full spec for context: docs/figma-reports/{file_key}-spec.md")
+## Option B: Fan-Out (>3 components)
+
+### Batching Algorithm (dependency-aware)
+
+# 1. **Parse Component Hierarchy** from spec — extract parent-child tree
+# 2. **Identify leaf components** — components with no children (e.g., Button, Badge, Icon)
+# 3. **Identify composite components** — components that reference other components as children
+# 4. **Group by subtree** — keep each parent with its direct children in the same batch
+# 5. **Distribute leaf components** — fill remaining batch slots with independent leaf components
+# 6. **Target batch size: 4** — aim for ~4 components per batch, but never split a parent from its children
+
+### Batching Rules
+# - A parent and ALL its direct children MUST be in the same batch
+# - Leaf components (no children, not referenced by others) can go in any batch
+# - If a subtree has >4 components, it gets its own batch (no size limit for subtrees)
+# - Shared utility components (used by 2+ parents) go in the FIRST batch
+
+### Example
+# Hierarchy:
+#   PageLayout
+#   ├── Header (uses Logo, NavMenu)
+#   ├── CardGrid (uses Card, Badge)
+#   └── Footer
+#
+# Batching:
+#   Batch 1: [Logo, NavMenu, Header]        ← subtree
+#   Batch 2: [Badge, Card, CardGrid]         ← subtree
+#   Batch 3: [Footer, PageLayout]            ← root + leaf
+
+### Execution
+for batch in dependency_aware_batches:
+    Task(subagent_type="pb-figma:code-generator-{framework}",
+         prompt=f"Generate ONLY these components: {batch}. "
+                f"Read full spec for context: docs/figma-reports/{file_key}-spec.md")
+
+# > **Important:** Each batch reads the FULL spec for shared context (tokens, assets).
+# > Only component generation is scoped to the batch.
 
 # Step 5: Compliance Checker
 Task(subagent_type="pb-figma:compliance-checker",
