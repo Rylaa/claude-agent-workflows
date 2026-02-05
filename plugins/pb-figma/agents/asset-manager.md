@@ -137,16 +137,21 @@ For each asset in the "Assets Required" table, classify the asset type and use t
 #### 2.1 Asset Type Classification
 
 #### Classification Procedure
+**Step-by-step classification (spec-first, MCP when needed):**
 
-**Step-by-step classification using MCP tools:**
+1. **Check spec pre-classification first:**
+   - Read asset type and format from the "Assets Required" table
+   - If the spec provides explicit type (SIMPLE_ICON, COMPLEX_VECTOR, etc.) AND format (SVG, PNG) → use directly, skip MCP call
+   - Design-analyst already pre-classifies most assets
 
-1. **Get node details:**
+2. **If spec is ambiguous or type is missing:** Call `figma_get_node_details` for inspection:
    ```
    figma_get_node_details({
      file_key: "{file_key}",
      node_id: "{node_id}"
    })
    ```
+   Then apply classification criteria from the table below.
 
 2. **Analyze children from node details response:**
    ```typescript
@@ -323,6 +328,18 @@ figma_export_assets:
   - scale: 1
 ```
 
+##### Chart/Illustrations (PNG format)
+For assets with exportSettings (charts, infographics, data visualizations):
+```
+figma_export_assets:
+  - file_key: {file_key}
+  - node_ids: [{node_id}]
+  - format: png
+  - scale: 2
+```
+
+**Important:** If the frame has composite layers (dark+bright siblings), apply Composite Illustration Detection (section 2.1.1) first to identify the correct layer to export.
+
 ##### Complex Vectors (PNG format)
 For charts, illustrations, complex graphics (≥10 vector paths):
 ```
@@ -356,7 +373,7 @@ figma_get_images:
 #### 2.3 Download Strategy
 
 **Asset Processing Order:**
-1. **Classify first** - Determine asset type (SIMPLE_ICON, COMPLEX_VECTOR, RASTER_IMAGE, IMAGE_FILL)
+1. **Classify first** - Determine asset type (CHART_ILLUSTRATION, SIMPLE_ICON, COMPLEX_VECTOR, RASTER_IMAGE, IMAGE_FILL)
 2. **Batch by type** - Group similar assets to minimize API calls
 3. **Process order:**
    - Simple icons (SVG) - typically smaller, faster
