@@ -1049,6 +1049,42 @@ Components generated: {count}
 Framework: React/Next.js + Tailwind
 ```
 
+## Step 12: Generate Component Tests (Optional)
+
+> **Reference:** Load `test-generation.md` via `Glob("**/references/test-generation.md")` for test templates and patterns.
+> **Reference:** Load `testing-strategy.md` via `Glob("**/references/testing-strategy.md")` for test configuration.
+
+If the user has requested tests OR the project has an existing test setup (`vitest.config.*` or `jest.config.*` exists):
+
+For each generated component, create `{ComponentName}.test.tsx`:
+
+```tsx
+import { render, screen } from '@testing-library/react';
+import { axe, toHaveNoViolations } from 'jest-axe';
+import { {ComponentName} } from './{ComponentName}';
+
+expect.extend(toHaveNoViolations);
+
+describe('{ComponentName}', () => {
+  it('renders without crashing', () => {
+    render(<{ComponentName} />);
+  });
+
+  it('has no accessibility violations', async () => {
+    const { container } = render(<{ComponentName} />);
+    const results = await axe(container);
+    expect(results).toHaveNoViolations();
+  });
+});
+```
+
+**Rules:**
+1. Only generate tests if user requests OR test infrastructure exists
+2. Include accessibility test (jest-axe) for every component
+3. Add prop-specific tests for components with variants
+4. Place test file next to component file
+5. Add test files to "Generated Code" table with type "test"
+
 ## Checkpoint Write
 
 After successfully generating all components and updating the spec, write a checkpoint file:

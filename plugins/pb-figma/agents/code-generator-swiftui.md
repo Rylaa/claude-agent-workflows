@@ -1092,6 +1092,38 @@ Components generated: {count}
 Framework: SwiftUI (iOS/macOS)
 ```
 
+## Step 12: Generate Component Tests (Optional)
+
+> **Reference:** Load `test-generation.md` via `Glob("**/references/test-generation.md")` for test templates.
+
+If the user has requested tests OR the project has an existing test target:
+
+For each generated View, create `{ComponentName}ViewTests.swift`:
+
+```swift
+import XCTest
+import SwiftUI
+@testable import {ModuleName}
+
+final class {ComponentName}ViewTests: XCTestCase {
+    func testViewInitialization() {
+        let view = {ComponentName}View()
+        XCTAssertNotNil(view)
+    }
+
+    func testAccessibilityLabels() {
+        let view = {ComponentName}View()
+        // Verify accessibility labels are set
+        XCTAssertNotNil(view.body)
+    }
+}
+```
+
+**Rules:**
+1. Only generate tests if user requests OR test target exists in Xcode project
+2. Place test files in the project's test target directory
+3. Add test files to "Generated Code" table with type "test"
+
 ## Checkpoint Write
 
 After successfully generating all Views and updating the spec, write a checkpoint file:
