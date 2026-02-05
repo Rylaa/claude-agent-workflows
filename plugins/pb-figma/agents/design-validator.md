@@ -64,6 +64,7 @@ For each node and its children, verify:
 - [ ] Text auto-resize behavior documented per TEXT node
 - [ ] Spacing values captured (padding, gap, margins)
 - [ ] Frame dimensions extracted (width, height for all containers)
+- [ ] **Nested frame dimensions extracted** via per-card `figma_get_node_details` queries
 - [ ] Corner radius values extracted (individual corners if different)
 - [ ] Border/stroke properties extracted (color, width, opacity)
 - [ ] Effects documented (shadows, blurs)
@@ -421,7 +422,15 @@ Use `TodoWrite` to track validation progress through these steps:
 6. **Classify Duplicate Icons** - See reference: `asset-classification-guide.md` (Glob: `**/references/asset-classification-guide.md`)
    - Determine icon position (leading=thematic, trailing=status)
    - Add `iconPosition` and `iconType` fields to asset inventory
-7. **Deep Inspection** - For each component, use `figma_get_node_details`
+7. **Deep Inspection** - For each component:
+   - Call `figma_get_node_details` for the component frame
+   - For each child frame within the component, call `figma_get_node_details` to extract:
+     - Inner dimensions (width, height)
+     - Inner Auto Layout properties (padding, spacing, constraints)
+     - Min/Max width/height constraints
+     - Text node properties (textAutoResize, textDecoration)
+   - Add ALL inner frames to the **Nested Frames Table** in the Validation Report
+   - **Do NOT assume inner card elements are captured by the file structure query** — the tiered depth strategy may not reach deeply nested frames
 8. **Resolve Gaps** - Attempt to fill missing data with additional MCP calls
 9. **Ensure Output Directory** - `mkdir -p docs/figma-reports`
 10. **Generate Report** - Write to `docs/figma-reports/{file_key}-validation.md`
@@ -517,6 +526,16 @@ When gradient fills are detected in any node, include detailed gradient informat
 > This data eliminates the need for downstream agents to re-query `figma_get_node_details` for gradient extraction.
 
 > **Note:** Text Auto-Resize, Text Decoration, and Letter Spacing are now captured in the **Text Node Properties** table above. This eliminates the need for downstream agents to re-query Figma for text-level details.
+
+## Nested Frames (Per-Component Inner Layout)
+
+> **Purpose:** Captures inner frame dimensions and layout properties that may be beyond the file structure depth limit. Each component's inner frames are queried individually via `figma_get_node_details`.
+
+| Parent Component | Node ID | Node Name | Width | Height | Layout Mode | Padding (T/R/B/L) | Spacing | Min/Max Width |
+|-----------------|---------|-----------|-------|--------|-------------|-------------------|---------|---------------|
+| OnboardingCard | 3:231 | CardContent | 361 | 480 | VERTICAL | 16/16/16/16 | 12 | -/- |
+| OnboardingCard | 3:232 | TitleRow | 329 | 48 | HORIZONTAL | 0/0/0/0 | 8 | -/- |
+| ChecklistItem | 3:240 | ItemContent | 329 | 56 | HORIZONTAL | 12/12/12/12 | 8 | -/361 |
 
 ## Assets Inventory
 
