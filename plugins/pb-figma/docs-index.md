@@ -63,7 +63,7 @@
 | React Patterns (CVA, Utilities) | @skills/figma-to-code/references/react-patterns.md | code-generator-react |
 | SwiftUI Patterns (Glass, Layer, Adaptive) | @skills/figma-to-code/references/swiftui-patterns.md | code-generator-swiftui |
 | SwiftUI Component Example | @skills/figma-to-code/references/swiftui-component-example.md | code-generator-swiftui |
-| Inline Text Variations | @skills/figma-to-code/references/inline-text-variations.md | code-generator-swiftui |
+| Inline Text Variations | @skills/figma-to-code/references/inline-text-variations.md | code-generator-react, code-generator-swiftui |
 
 ### Development References
 | Topic | Path | Used By |

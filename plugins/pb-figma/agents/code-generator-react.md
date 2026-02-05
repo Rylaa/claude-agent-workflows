@@ -36,6 +36,7 @@ Load these references when needed:
 - Test generation: `test-generation.md` → Glob: `**/references/test-generation.md`
 - Testing strategy: `testing-strategy.md` → Glob: `**/references/testing-strategy.md`
 - Storybook integration: `storybook-integration.md` → Glob: `**/references/storybook-integration.md`
+- Inline text variations: `inline-text-variations.md` → Glob: `**/references/inline-text-variations.md`
 - Error recovery: `error-recovery.md` → Glob: `**/references/error-recovery.md`
 - Framework detection: `framework-detection.md` → Glob: `**/references/framework-detection.md`
 
@@ -474,6 +475,36 @@ Replace hardcoded values with CSS custom properties or Tailwind tokens from the 
 | UNDERLINE | `underline` |
 | STRIKETHROUGH | `line-through` |
 | UNDERLINE + STRIKETHROUGH | `underline line-through` |
+
+##### Apply Inline Text Variations from Spec
+
+> **Reference:** Load `inline-text-variations.md` via `Glob("**/references/inline-text-variations.md")` for multi-segment text handling with per-character color, weight, and decoration.
+
+When the Implementation Spec contains an "### Inline Text Variations" section for a component, generate `<span>` segments instead of a single text element:
+
+**Spec Input Example:**
+```
+| Range | Text | Color | Weight | Decoration |
+|-------|------|-------|--------|------------|
+| 0-15 | "Let's fix your " | #FFFFFF | 600 | none |
+| 15-19 | "Hook" | #F2F20D | 600 | underline |
+```
+
+**Generated Output:**
+```tsx
+<p className="text-2xl font-semibold">
+  <span className="text-white">Let's fix your </span>
+  <span className="text-[#F2F20D] underline">Hook</span>
+</p>
+```
+
+**Rules:**
+1. Wrap the entire text in a `<p>` or `<span>` with shared typography classes (font-size, font-weight if uniform)
+2. Each variation row becomes a child `<span>` with its own color and decoration classes
+3. If weight differs across segments, apply `font-{weight}` per span instead of parent
+4. Use Tailwind arbitrary values for non-standard hex colors: `text-[#F2F20D]`
+5. Decoration maps: `underline` → `underline`, `strikethrough` → `line-through`
+6. If decoration has a color different from text color, add `decoration-[#hex]`
 
 ##### Add Semantic HTML
 
