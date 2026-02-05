@@ -170,8 +170,8 @@ See reference: `asset-classification-guide.md` (Glob: `**/references/asset-class
 
 | Asset Type | Detection Criteria | Format |
 |------------|-------------------|--------|
-| SIMPLE_ICON | <10 vectors, 16-48px | SVG |
-| COMPLEX_VECTOR | ≥3 vectors, >50px | PNG |
+| SIMPLE_ICON | <10 vector children AND ≤50px max dimension | SVG |
+| COMPLEX_VECTOR | ≥10 vector children OR >50px max dimension | PNG |
 | CHART_ILLUSTRATION | Has exportSettings | PNG |
 | RASTER_IMAGE | Image fills | PNG |
 | IMAGE_FILL | Has imageRef | Use figma_get_images |
