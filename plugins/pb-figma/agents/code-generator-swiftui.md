@@ -970,27 +970,17 @@ For each generated component, verify:
    - Document in Generated Code table with status "WARN - Missing asset"
    - Add to summary: "Asset {name} not found - using SF Symbol fallback"
 
-### Step 7: Register Code Connect Mapping
+### Step 7: Prepare Code Connect Data
 
-After successfully generating each component, register it for future reuse:
+After generating each component, prepare (but do NOT register) Code Connect data in the spec:
 
-1. Check if the component already has a Code Connect mapping (`code_connect: true` in spec)
-   - If YES: Skip registration
-   - If NO: Register new mapping:
+1. For each generated component, add to the "Generated Code" table:
+   - `component_path`: relative path to generated file
+   - `component_name`: exported struct name
+   - `props_mapping`: Figma prop → Swift property mapping
+   - `code_connect_ready`: `true`
 
-```python
-figma_add_code_connect_map(
-  file_key="{file_key}",
-  node_id="{component_node_id}",
-  component_path="{relative_path_to_generated_file}",
-  component_name="{StructName}",
-  props_mapping={"FigmaPropName": "swiftPropertyName"},
-  variants={"variant_name": {"prop": "value"}},
-  example="StructName(prop: .value)"
-)
-```
-
-> **Why:** Future pipeline runs can detect this mapping and reuse existing SwiftUI views instead of regenerating them.
+> **Note:** Actual Code Connect registration happens in compliance-checker (Phase 5) AFTER validation passes. This prevents registering non-compliant code as reusable.
 
 ### Manual Generation Fallback
 

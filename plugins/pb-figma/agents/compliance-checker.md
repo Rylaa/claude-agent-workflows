@@ -10,6 +10,7 @@ tools:
   - TodoWrite
   - AskUserQuestion
   - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_get_screenshot
+  - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_add_code_connect_map
 ---
 
 ## Reference Loading
@@ -923,6 +924,38 @@ For large projects with many components:
 - Report progress during verification
 - Save partial results to avoid data loss
 - Resume from last successful component if interrupted
+
+## Post-Validation: Register Code Connect Mappings
+
+After all components receive PASS status, register them with Figma Code Connect:
+
+1. Read the "Generated Code" table from the spec
+2. For each component where `code_connect_ready: true` AND compliance status is PASS:
+
+```python
+figma_add_code_connect_map(
+  file_key="{file_key}",
+  node_id="{component_node_id}",
+  component_path="{component_path}",
+  component_name="{component_name}",
+  props_mapping={props_mapping_from_spec},
+  variants={variants_from_spec},
+  example="{example_usage}"
+)
+```
+
+3. Skip registration for components with WARN or FAIL status
+4. Document registered components in the Final Report:
+
+```markdown
+## Code Connect Registrations
+| Component | Node ID | Status | Registered |
+|-----------|---------|--------|------------|
+| Button | 1:234 | PASS | Yes |
+| CardView | 2:345 | WARN | No - compliance warning |
+```
+
+> **Why:** Only compliance-verified code should be registered for reuse.
 
 ## Checkpoint Write
 
