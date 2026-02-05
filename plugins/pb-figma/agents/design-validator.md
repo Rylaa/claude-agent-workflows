@@ -59,7 +59,9 @@ For each node and its children, verify:
 
 ### 2. Design Tokens
 - [ ] Colors extracted (fills, strokes) with fill opacity and node opacity
-- [ ] Typography defined (font family, size, weight, line-height)
+- [ ] Typography defined (font family, size, weight, line-height, letter-spacing, font-style)
+- [ ] Text decoration properties extracted per TEXT node (underline, strikethrough)
+- [ ] Text auto-resize behavior documented per TEXT node
 - [ ] Spacing values captured (padding, gap, margins)
 - [ ] Frame dimensions extracted (width, height for all containers)
 - [ ] Corner radius values extracted (individual corners if different)
@@ -429,10 +431,19 @@ Write to: `docs/figma-reports/{file_key}-validation.md`
 | text | #1F2937 | 1.0 | 1.0 | 1.0 | Body text |
 
 ### Typography
-| Style | Font | Size | Weight | Line Height |
-|-------|------|------|--------|-------------|
-| heading-1 | Inter | 32px | 700 | 1.2 |
-| body | Inter | 16px | 400 | 1.5 |
+| Style | Font | Size | Weight | Line Height | Letter Spacing | Font Style | Usage |
+|-------|------|------|--------|-------------|----------------|------------|-------|
+| heading-1 | Inter | 32px | 700 | 1.2 | -0.02em | normal | Page titles |
+| body | Inter | 16px | 400 | 1.5 | 0 | normal | Body text |
+
+### Text Node Properties
+
+For each TEXT node, capture per-node text properties:
+
+| Node ID | Text Content | Text Decoration | Auto-Resize | Font Weight | Letter Spacing | Frame Dims | Char Overrides |
+|---------|-------------|-----------------|-------------|-------------|----------------|-----------|----------------|
+| 3:245 | "Click here" | UNDERLINE | HEIGHT | 600 | -0.02em | 200×32 | None |
+| 3:250 | "Price" | NONE | NONE | 400 | 0 | 150×24 | 1 style |
 
 ### Inline Text Variations Detected
 
@@ -473,16 +484,7 @@ When gradient fills are detected in any node, include detailed gradient informat
 
 > This data eliminates the need for downstream agents to re-query `figma_get_node_details` for gradient extraction.
 
-### Text Auto-Resize Properties
-
-For each text node, also capture the `textAutoResize` property:
-
-| Node ID | Node Name | textAutoResize | Width | Height |
-|---------|-----------|----------------|-------|--------|
-
-Values: `NONE` | `WIDTH_AND_HEIGHT` | `HEIGHT`
-
-> This data enables design-analyst to determine text sizing behavior without additional API calls.
+> **Note:** Text Auto-Resize, Text Decoration, and Letter Spacing are now captured in the **Text Node Properties** table above. This eliminates the need for downstream agents to re-query Figma for text-level details.
 
 ## Assets Inventory
 | Asset | Type | Node ID | Export Format | Position | Icon Type | Has Export Settings |
