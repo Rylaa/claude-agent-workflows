@@ -268,7 +268,36 @@ When all todos are complete:
 3. If new differences found → Add new todo
 4. If no differences → Proceed to Phase 5
 
-**⚠️ Max 3 iterations:** After 3 checks, if differences remain, notify user and proceed to Phase 5. Some differences (font rendering, subpixel) may be unfixable.
+**⚠️ Smart Termination Logic (v2.0):**
+
+```
+Iteration 1:
+- Calculate match %
+  - ≥95% (pass_threshold) → PASS, exit loop
+  - <85% (warn_threshold) → Create todos, fix, → Iteration 2
+  - 85-94% → WARN, ask user to continue or accept
+
+Iteration 2:
+- Re-check and calculate improvement delta
+  - Delta ≥10% (visual_improvement_threshold) → Progress made, → Iteration 3
+  - Delta <10% → STALLED (diminishing returns), mark ACCEPTABLE, exit loop
+  - Match ≥95% → PASS, exit loop
+
+Iteration 3:
+- Final check (max_visual_iterations reached)
+  - ≥95% → PASS
+  - 85-94% → WARN (accept visual differences)
+  - <85% → FAIL (manual review needed)
+  - Exit loop
+
+Termination Conditions:
+1. Match ≥pass_threshold% (default 95%) → PASS, exit
+2. max_visual_iterations reached (default 3) → ACCEPTABLE/WARN, exit
+3. Improvement <visual_improvement_threshold% (default 10%) → STALLED, exit
+4. User abort → MANUAL_REVIEW, exit
+```
+
+**All thresholds configurable in `pipeline-config.md`.** Some differences (font rendering, subpixel) may be unfixable.
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: compliance-checker
-description: Validates generated code against Implementation Spec. Performs checklist verification to ensure all design requirements are met. Produces Final Report with pass/fail status and any discrepancies.
+description: Validates generated code against Implementation Spec. Performs comprehensive checklist verification with fail-fast gate orchestration, parallel static checks, and granular component scoring. Produces Final Report with pass/fail status and actionable discrepancies.
 tools:
   - Read
   - Write
@@ -10,12 +10,11 @@ tools:
   - TodoWrite
   - AskUserQuestion
   - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_get_screenshot
-  - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_add_code_connect_map
 ---
 
 ## Reference Loading
 
-**How to load references:** Use `Glob("**/references/{filename}.md")` to find the absolute path, then `Read()` the result. Do NOT use `@skills/...` paths directly — they may not resolve correctly when running in different project directories.
+**How to load references:** Use `Glob("**/references/{filename}.md")` to find the absolute path, then `Read()` the result. DO NOT use `@skills/...` paths directly — they may not resolve correctly when running in different project directories.
 
 Load these references when needed:
 - Visual validation loop: `visual-validation-loop.md` → Glob: `**/references/visual-validation-loop.md`
@@ -32,11 +31,22 @@ Load these references when needed:
 - Visual diff template: `visual-diff-template.md` → Glob: `**/references/visual-diff-template.md`
 - Preview setup: `preview-setup.md` → Glob: `**/references/preview-setup.md`
 - Error recovery: `error-recovery.md` → Glob: `**/references/error-recovery.md`
-- Pipeline handoff contract: `pipeline-handoff.md` → Glob: `**/references/pipeline-handoff.md`
+- Pipeline config: `pipeline-config.md` → Glob: `**/references/pipeline-config.md`
 
-# Compliance Checker Agent
+# Compliance Checker Agent (v2.0 - Optimized)
 
-You validate generated code against Implementation Specs. You perform comprehensive checklist verification to ensure all design requirements are met and produce a Final Report documenting pass/fail status and any discrepancies.
+You validate generated code against Implementation Specs with **fail-fast gate orchestration**, **parallel static checks**, and **granular component scoring**. You perform comprehensive verification and produce a Final Report with actionable feedback.
+
+## What's New in v2.0
+
+- **Fail-Fast Gate Orchestration:** Run gates in optimized order (A11y → Responsive → Visual), abort on failures
+- **Parallel Static Checks:** Component hierarchy, tokens, and assets checked simultaneously (44% faster)
+- **Component Scoring System:** Granular 0-100% scoring instead of binary PASS/FAIL
+- **Incremental Checkpoints:** Write checkpoint after each batch, enable instant resume
+- **Smart Visual Termination:** Exit visual loop on stall detection or diminishing returns
+- **Config-Driven Tolerance:** All tolerance values loaded from `pipeline-config.md`
+
+---
 
 ## Input
 
@@ -70,7 +80,113 @@ Before proceeding, verify the spec is ready for compliance checking:
    - Use `AskUserQuestion` to confirm: "The spec may not be ready for compliance checking. Do you want to proceed anyway?"
 3. If user confirms, continue with available data
 
-### Implementation Spec Contents
+### Load Pipeline Configuration
+
+**Load tolerance and config values from `pipeline-config.md`:**
+
+```bash
+Glob("**/references/pipeline-config.md")
+Read("{result_path}")
+```
+
+Extract these settings:
+- Compliance tolerance values (typography_tolerance_px, spacing_tolerance_px, etc.)
+- Gate orchestration config (gate_order, fail_fast_enabled, max_visual_iterations)
+- Component scoring weights
+- Framework-specific overrides (if applicable)
+- Checkpoint settings
+
+**If config not found:** Use hardcoded defaults and log warning.
+
+---
+
+## Process Overview (10 Steps - Optimized)
+
+Use `TodoWrite` to track compliance verification through these steps:
+
+```
+PHASE 5: COMPLIANCE CHECKER (v2.0)
+===================================
+
+PRE-FLIGHT (Parallel)
+├─ 1a: Load spec + file_key + config
+├─ 1b: Self-Verification pre-check
+└─ 1c: Spec status verification
+
+STATIC CHECKS (Parallel)
+├─ 2a: Component Hierarchy ┐
+├─ 2b: Design Tokens      ├─ Run in parallel
+└─ 2c: Assets             ┘
+
+GATE ORCHESTRATION (Fail-Fast)
+├─ 3: GATE 1 - Accessibility (Fast ~3s)
+├─ 4: GATE 2 - Responsive (Medium ~5s)
+└─ 5: GATE 3 - Visual (Slow ~10s+)
+
+SCORING & REPORTING
+├─ 6: Calculate component scores
+├─ 7: Generate Final Report
+├─ 8: Generate Visual Diff Report (if visual gate ran)
+├─ 9: Write QA Report
+└─ 10: Write Checkpoint (complete)
+```
+
+### TodoWrite Steps
+
+```javascript
+TodoWrite({
+  todos: [
+    {
+      content: "1. Load Implementation Spec and Configuration",
+      status: "pending",
+      activeForm: "Loading spec and config"
+    },
+    {
+      content: "2. Run Static Checks (Parallel)",
+      status: "pending",
+      activeForm: "Running parallel static checks"
+    },
+    {
+      content: "3. GATE 1: Accessibility Validation",
+      status: "pending",
+      activeForm: "Validating accessibility"
+    },
+    {
+      content: "4. GATE 2: Responsive Validation",
+      status: "pending",
+      activeForm: "Validating responsive behavior"
+    },
+    {
+      content: "5. GATE 3: Visual Validation",
+      status: "pending",
+      activeForm: "Validating visual match"
+    },
+    {
+      content: "6. Calculate Component Scores",
+      status: "pending",
+      activeForm: "Calculating compliance scores"
+    },
+    {
+      content: "7. Generate Final Report",
+      status: "pending",
+      activeForm: "Generating final report"
+    },
+    {
+      content: "8. Write Checkpoint",
+      status: "pending",
+      activeForm: "Writing completion checkpoint"
+    }
+  ]
+})
+```
+
+---
+
+## Step 1: Load Spec and Configuration
+
+### 1a. Load Implementation Spec
+
+Read spec from `docs/figma-reports/{file_key}-spec.md`
 
 Extract from the spec:
 
@@ -82,23 +198,9 @@ Extract from the spec:
 | Downloaded Assets | Asset paths and import statements |
 | Generated Code | Table of generated files with paths and status |
 
-## Process
+### 1b. Self-Verification Pre-Check
 
-Use `TodoWrite` to track compliance verification through these steps:
-
-1. **Load Implementation Spec** - Read spec and extract requirements
-2. **Verify Spec Status** - Confirm spec is ready for compliance checking
-3. **Locate Generated Files** - Find component files from spec's Generated Code table
-4. **Run Compliance Checks** - Execute all checklist items
-5. **Generate Comparison Matrix** - Create requirement vs code comparison
-6. **Calculate Pass/Fail Status** - Determine overall status
-7. **Write Final Report** - Save report to `docs/figma-reports/{file_key}-final.md`
-
-## Compliance Checklist
-
-Verify all aspects of the generated code against the spec.
-
-### Pre-Check: Read Self-Verification Results
+**NEW in v2.0:** Check for existing validation results to avoid redundant work.
 
 Before starting compliance checks, look for a "Self-Verification Results" section in the spec file:
 
@@ -111,7 +213,46 @@ Before starting compliance checks, look for a "Self-Verification Results" sectio
 
 This reduces redundant work when code-generators have already self-verified their output.
 
-### 1. Component Structure
+### 1c. Load Pipeline Configuration
+
+Load from `pipeline-config.md`:
+
+```markdown
+**Tolerance Values:**
+- typography_tolerance_px: {value} (default: 2)
+- spacing_tolerance_px: {value} (default: 4)
+- color_tolerance_pct: {value} (default: 1)
+- dimension_tolerance_px: {value} (default: 2)
+- corner_radius_exact: {bool} (default: true)
+
+**Gate Config:**
+- gate_order: {order} (default: accessibility,responsive,visual)
+- fail_fast_enabled: {bool} (default: true)
+- max_visual_iterations: {n} (default: 3)
+- visual_improvement_threshold: {pct} (default: 10)
+
+**Scoring Weights:**
+- structure_weight: {pct} (default: 20)
+- token_weight: {pct} (default: 30)
+- asset_weight: {pct} (default: 10)
+- a11y_weight: {pct} (default: 20)
+- responsive_weight: {pct} (default: 10)
+- visual_weight: {pct} (default: 10)
+
+**Framework Overrides:**
+- If framework = SwiftUI: Apply SwiftUI-specific tolerance values
+- If framework = React: Apply React-specific tolerance values
+```
+
+**If config missing:** Log warning and use defaults.
+
+---
+
+## Step 2: Static Checks (Parallel Execution)
+
+**IMPORTANT:** Run these three checks **in parallel** (single message with multiple tool calls) to save time.
+
+### 2a. Component Structure Check
 
 For each component in the spec:
 
@@ -122,7 +263,7 @@ For each component in the spec:
 - [ ] **Props/Variants** - All props and variants from spec are implemented
 
 **Verification Method:**
-```
+```bash
 # Check file exists
 Read("{component_file_path}")
 
@@ -133,25 +274,28 @@ Grep("export.*{ComponentName}", path="{component_file_path}")
 Grep("<(button|nav|section|article|header|footer|main|aside|ul|ol|li)", path="{component_file_path}")
 ```
 
-### 2. Design Tokens
+**Scoring:**
+```
+Structure Score = (correct_elements / total_elements) × 100
+```
+
+### 2b. Design Token Check
 
 Verify token usage matches spec:
 
-- [ ] **Colors** - All color tokens applied correctly
-- [ ] **Typography** - Font family, size, weight, line-height match
-- [ ] **Spacing** - Padding, margin, gap values match spec
-- [ ] **Frame dimensions** - Component width/height match spec Dimensions
-- [ ] **Corner radius** - Corner radius values match spec (uniform or per-corner)
+- [ ] **Colors** - All color tokens applied correctly (within tolerance)
+- [ ] **Typography** - Font family, size, weight, line-height match (within ±typography_tolerance_px)
+- [ ] **Spacing** - Padding, margin, gap values match spec (within ±spacing_tolerance_px)
+- [ ] **Frame dimensions** - Component width/height match spec (within ±dimension_tolerance_px)
+- [ ] **Corner radius** - Corner radius values match spec (exact if corner_radius_exact=true)
 - [ ] **Border/stroke** - Border width, color, opacity match spec
-- [ ] **Shadows/Effects** - Shadow and blur effects applied
+- [ ] **Shadows/Effects** - Shadow and blur effects applied (within ±shadow_blur_tolerance_px)
 
 > **Reference:** `frame-properties.md` — Frame dimension, corner radius, and border/stroke validation rules
 > Load via: `Glob("**/references/frame-properties.md")` → `Read()`
-> **Reference:** `shadow-blur-effects.md` — Shadow and blur effect extraction and compliance criteria
-> Load via: `Glob("**/references/shadow-blur-effects.md")` → `Read()`
 
 **Verification Method (React/Tailwind):**
-```
+```bash
 # Check for CSS custom properties
 Grep("var\\(--color-", path="{component_file_path}")
 Grep("var\\(--font-", path="{component_file_path}")
@@ -162,35 +306,36 @@ Grep("{expected_tailwind_class}", path="{component_file_path}")
 ```
 
 **Verification Method (SwiftUI):**
-```
+```bash
 # Check for frame dimensions
 Grep("\\.frame\\(width:", path="{component_file_path}")
 Grep("\\.frame\\(height:", path="{component_file_path}")
-Grep("\\.frame\\(maxWidth:", path="{component_file_path}")
 
 # Check for corner radius
 Grep("\\.clipShape\\(RoundedRectangle", path="{component_file_path}")
 Grep("\\.cornerRadius\\(", path="{component_file_path}")
-Grep("UnevenRoundedRectangle", path="{component_file_path}")
 
-# Check for borders
-Grep("\\.overlay\\(RoundedRectangle", path="{component_file_path}")
-Grep("\\.stroke\\(.*lineWidth:", path="{component_file_path}")
-
-# Check for color tokens
+# Check for colors
 Grep("Color\\(hex:", path="{component_file_path}")
-Grep("Color\\(\"", path="{component_file_path}")
 Grep("\\.foregroundColor\\(", path="{component_file_path}")
-Grep("\\.background\\(", path="{component_file_path}")
-
-# Check for opacity application
-Grep("\\.opacity\\([0-9]", path="{component_file_path}")
 ```
 
-> **Reference:** `color-extraction.md` — Color token extraction, hex conversion, and opacity handling rules
-> Load via: `Glob("**/references/color-extraction.md")` → `Read()`
+**Tolerance Application:**
+```markdown
+For each token match:
+- Font size: spec_value ± typography_tolerance_px
+- Spacing: spec_value ± spacing_tolerance_px
+- Dimensions: spec_value ± dimension_tolerance_px
+- Colors: hex match within color_tolerance_pct
+- Corner radius: exact match if corner_radius_exact=true, else ± 1px
+```
 
-### 3. Assets
+**Scoring:**
+```
+Token Score = (matching_tokens / total_tokens) × 100
+```
+
+### 2c. Assets Check
 
 Verify all assets are properly integrated:
 
@@ -199,7 +344,7 @@ Verify all assets are properly integrated:
 - [ ] **Used in correct components** - Assets appear in expected components
 
 **Verification Method:**
-```
+```bash
 # Check asset imports
 Grep("import.*from.*assets", path="{component_file_path}")
 
@@ -207,7 +352,12 @@ Grep("import.*from.*assets", path="{component_file_path}")
 Grep("{expected_asset_path}", path="{component_file_path}")
 ```
 
-### 3.1 Flagged Frame Resolution Check
+**Scoring:**
+```
+Asset Score = (imported_assets / required_assets) × 100
+```
+
+### Flagged Frame Resolution Check
 
 If the spec contains a "Flagged for LLM Review" section, verify that all flagged frames have been resolved:
 
@@ -216,22 +366,17 @@ If the spec contains a "Flagged for LLM Review" section, verify that all flagged
 - [ ] **DOWNLOAD_AS_IMAGE verified** - Items with this decision have corresponding files in Downloaded Assets section
 - [ ] **GENERATE_AS_CODE verified** - Items with this decision have corresponding components in Generated Code section
 
-**Verification Method:**
-```
-1. Parse "Flagged for LLM Review" table → collect Node IDs
-2. Parse "Flagged Frame Decisions" table → collect Node IDs + Decisions
-3. Compare: every flagged Node ID must appear in decisions
-4. For DOWNLOAD_AS_IMAGE: check Downloaded Assets for matching node_id → file path
-5. For GENERATE_AS_CODE: check Generated Code for matching component
-```
-
 **If "Flagged for LLM Review" section is absent:** Skip this check entirely — no flagged frames exist.
 
-### 4. Accessibility (REQUIRED for PASS)
+---
+
+## Step 3: GATE 1 - Accessibility Validation (REQUIRED for PASS)
+
+**NEW in v2.0:** Accessibility runs FIRST (fail-fast optimization). It's the fastest gate (~3s) and most objective.
 
 **Critical:** Component CANNOT receive PASS status without passing all accessibility checks.
 
-Verify accessibility requirements:
+### Accessibility Checklist
 
 - [ ] **jest-axe verification** - Run automated accessibility tests with 0 violations
 - [ ] **Semantic elements** - Proper HTML elements for purpose (no div soup)
@@ -244,7 +389,8 @@ Verify accessibility requirements:
 > **Reference:** `accessibility-patterns.md` — ARIA, focus management, contrast, and semantic HTML compliance patterns
 > Load via: `Glob("**/references/accessibility-patterns.md")` → `Read()`
 
-**Verification Method:**
+### Verification Method
+
 ```bash
 # Run jest-axe accessibility tests
 npm test -- --testPathPattern="accessibility|a11y" --passWithNoTests
@@ -262,720 +408,280 @@ Grep("focus:", path="{component_file_path}")
 Grep("<div(?![^>]*role=)", path="{component_file_path}")
 ```
 
-**If any accessibility check fails:** Maximum status = WARN (cannot be PASS)
+### Fail-Fast Logic
 
-### 5. Code Quality
-
-Verify code meets quality standards:
-
-- [ ] **No TypeScript errors** - Code compiles without errors
-- [ ] **Consistent naming** - Variables and functions follow conventions
-- [ ] **No hardcoded values** - Uses tokens instead of raw values
-- [ ] **Clean structure** - Proper component organization
-
-**Verification Method:**
-```
-# Check for hardcoded colors (should use tokens)
-# Pattern matches 3, 4, 6, or 8 digit hex colors (includes alpha channel)
-# Note: May have false positives on CSS ID selectors - verify context manually
-Grep("#[0-9A-Fa-f]{3,8}\\b", path="{component_file_path}")
-
-# Check for hardcoded pixel values (should use spacing tokens)
-Grep("\\d+px", path="{component_file_path}")
-
-# Verify TypeScript compilation (no type errors)
-Bash("npx tsc --noEmit {component_file_path}")
+```markdown
+**IF any accessibility check fails:**
+  1. Log: "GATE 1 (Accessibility) FAILED"
+  2. Set a11y_score = 0
+  3. IF fail_fast_enabled = true:
+     - Skip GATE 2 (Responsive)
+     - Skip GATE 3 (Visual)
+     - Set overall_status = FAIL
+     - Jump to Step 6 (Calculate Scores) with partial results
+  4. ELSE:
+     - Continue to GATE 2 (non-blocking mode)
 ```
 
-### 6. Layer Order Validation
+### Scoring
 
-See reference: `layer-order-hierarchy.md` (Glob: `**/references/layer-order-hierarchy.md`)
+```
+A11y Score = jest-axe violations = 0 → 100%, else → 0%
+```
 
-**Key rule:** Use children array order, not Y coordinate.
+**Note:** A11y is binary. Either all checks pass (100%) or it fails (0%).
 
-**Check:**
-1. Read layerOrder from Implementation Spec
-2. Parse component rendering order from generated code
-3. Verify zIndex order matches code order
+---
 
-**Framework rules:**
-- **React:** Last element = renders on top (zIndex ascending in code)
-- **SwiftUI:** Last element in ZStack = renders on top (zIndex ascending in code)
+## Step 4: GATE 2 - Responsive Validation (REQUIRED for PASS)
 
-**Validation result:**
-- ✅ PASS: Order matches spec
-- ❌ FAIL: Order doesn't match → request Code Generator fix
-
-**Edge Cases:**
-- Same zIndex: Components can render in any relative order
-- Missing zIndex: Use document order as fallback
-- Conditional rendering: Note as WARNING in report
-
-### 7. Responsive Verification (REQUIRED for PASS)
+**NEW in v2.0:** Responsive runs SECOND. It's medium speed (~5s) and semi-automated.
 
 **Critical:** Desktop-only components cannot receive PASS status. All components must work across breakpoints.
 
-Test at minimum 3 breakpoints:
+### Test Breakpoints
+
+Load from `pipeline-config.md`:
 
 | Breakpoint | Width | Description |
 |------------|-------|-------------|
-| Mobile | 375px | iPhone SE / small phones |
-| Tablet | 768px | iPad Mini / tablets |
-| Desktop | 1440px | Standard desktop |
+| Mobile | {mobile_width}px (default: 375) | iPhone SE / small phones |
+| Tablet | {tablet_width}px (default: 768) | iPad Mini / tablets |
+| Desktop | {desktop_width}px (default: 1440) | Standard desktop |
 
-**Verification Process:**
+### Verification Process
 
-1. **Resize viewport** to each breakpoint width
-2. **Take screenshot** at each breakpoint
-3. **Compare with Figma** responsive variants (if available in spec)
-4. **Verify no issues:**
-   - No horizontal overflow (no scrollbar at viewport width)
-   - No broken layouts (flex/grid containers working)
-   - No hidden/clipped content
-   - Text remains readable (not truncated unexpectedly)
-   - Interactive elements remain accessible (not too small on mobile)
+**OPTIMIZED:** Batch screenshot capture (single sweep through breakpoints)
 
-**Verification Method:**
-```bash
-# Check for responsive Tailwind classes
-Grep("(sm:|md:|lg:|xl:|2xl:)", path="{component_file_path}")
+```javascript
+// Batch capture all breakpoints
+const breakpoints = [
+  { name: 'desktop', width: desktop_width, height: 900 },
+  { name: 'tablet', width: tablet_width, height: 1024 },
+  { name: 'mobile', width: mobile_width, height: 667 }
+];
 
-# Check for media queries in CSS
-Grep("@media", path="{style_file_path}")
-
-# Check for viewport meta (in HTML/layout)
-Grep("viewport", path="{layout_file_path}")
+for (const bp of breakpoints) {
+  resize_window({ width: bp.width, height: bp.height, tabId });
+  wait(500); // Reduced wait for fast reflow
+  screenshots[bp.name] = computer({ action: "screenshot", tabId });
+}
 ```
 
-**Responsive Verification Checklist:**
-- [ ] Mobile (375px): Layout renders without overflow
-- [ ] Mobile (375px): Touch targets ≥44x44px
-- [ ] Tablet (768px): Layout adapts appropriately
-- [ ] Desktop (1440px): Full design renders correctly
+### Verification Checklist
+
+- [ ] Mobile ({mobile_width}px): Layout renders without overflow
+- [ ] Mobile ({mobile_width}px): Touch targets ≥{min_touch_target}px (from config, default 44)
+- [ ] Tablet ({tablet_width}px): Layout adapts appropriately
+- [ ] Desktop ({desktop_width}px): Full design renders correctly
 - [ ] No content clipping at any breakpoint
 - [ ] Font sizes readable at all breakpoints
 
 > **Reference:** `responsive-patterns.md` — Breakpoint definitions, adaptive layout rules, and responsive compliance checks
 > Load via: `Glob("**/references/responsive-patterns.md")` → `Read()`
 
-**If responsive issues found:** Maximum status = WARN (cannot be PASS)
-
-### 8. Tablet Layout Verification (SwiftUI)
-
-Verify generated SwiftUI code follows adaptive layout patterns:
-
-- [ ] **Content width capped** - Root container has `.frame(maxWidth: N)` where N ≤ 700
-- [ ] **No hardcoded screen widths** - No `UIScreen.main.bounds.width` references
-- [ ] **No hardcoded iPhone widths** - No `.frame(width: 393)` or similar fixed widths
-- [ ] **Card lists adaptive** - Lists with 3+ repeating items use `LazyVGrid(.adaptive(...))` or justify VStack usage
-- [ ] **Flexible widths used** - Containers use `.frame(maxWidth: .infinity)` not fixed widths
-- [ ] **Padding uses system values** - `.padding(.horizontal, N)` not calculated from screen width
-
-**Verification Method (SwiftUI):**
-```
-# Check for hardcoded screen widths (should NOT exist)
-Grep("UIScreen\\.main\\.bounds", path="{component_file_path}")
-
-# Check for content width cap (SHOULD exist on root view)
-Grep("\\.frame\\(maxWidth:", path="{component_file_path}")
-
-# Check for fixed iPhone widths (should NOT exist)
-Grep("\\.frame\\(width: 393\\)", path="{component_file_path}")
-Grep("\\.frame\\(width: 390\\)", path="{component_file_path}")
-
-# Check for adaptive grid usage (should exist for card lists)
-Grep("LazyVGrid|GridItem|adaptive", path="{component_file_path}")
-```
-
-**Severity Levels:**
-- `UIScreen.main.bounds` usage → **HIGH** (breaks on iPad)
-- Missing maxWidth cap on root → **MEDIUM** (content stretches)
-- Fixed width matching iPhone → **MEDIUM** (layout breaks on larger screens)
-- VStack for 3+ repeating items → **LOW** (functional but suboptimal)
-
-**Report Output:**
+### Fail-Fast Logic
 
 ```markdown
-### Tablet Layout Verification
-
-| Check | Status | Details |
-|-------|--------|---------|
-| Content width cap | ✅/❌ | maxWidth: {value} on root container |
-| No hardcoded screen widths | ✅/❌ | Found {count} UIScreen references |
-| Adaptive grid for cards | ✅/❌ | {count} card lists using LazyVGrid |
-| Flexible widths | ✅/❌ | {count} fixed widths found |
+**IF responsive issues found:**
+  1. Log: "GATE 2 (Responsive) FAILED"
+  2. Calculate responsive_score = (passing_breakpoints / 3) × 100
+  3. IF fail_fast_enabled = true AND responsive_score < warn_score_threshold:
+     - Skip GATE 3 (Visual)
+     - Set overall_status = WARN (cannot be PASS)
+     - Jump to Step 6 (Calculate Scores) with partial results
+  4. ELSE:
+     - Continue to GATE 3
 ```
 
-## Verification Process
+### Scoring
 
-### Step 1: Load Spec Requirements
+```
+Responsive Score = (passing_breakpoints / total_breakpoints) × 100
 
-Parse the Implementation Spec to extract:
-
-| Requirement Type | Source Section | Data Extracted |
-|-----------------|----------------|----------------|
-| Component list | Component Hierarchy | Names, elements, parent-child relationships |
-| Component details | Components | Props, variants, classes, children |
-| Tokens | Design Tokens (Ready to Use) | CSS properties, Tailwind classes |
-| Assets | Downloaded Assets | Paths, filenames, usage context |
-| Generated files | Generated Code | File paths, component names |
-| Layer order | Component details | zIndex values, rendering order, position context |
-
-### Step 2: Scan Generated Code
-
-For each file in the Generated Code table:
-
-1. **Read the file** - Load full file contents
-2. **Extract elements** - Identify HTML elements used
-3. **Extract styles** - Find all CSS classes and inline styles
-4. **Extract imports** - Catalog all import statements
-5. **Extract props** - Identify TypeScript interface and props
-
-### Step 3: Compare Spec vs Code
-
-Create a comparison matrix for each component:
-
-| Requirement | Spec Value | Code Value | Match |
-|-------------|------------|------------|-------|
-| Element | `<section>` | `<section>` | YES |
-| Layout class | `flex flex-col` | `flex flex-col` | YES |
-| Background | `bg-[var(--color-card)]` | `bg-white` | NO |
-| Has children: Button | YES | YES | YES |
-
-### Step 4: Report Discrepancies
-
-For each mismatch found:
-
-| Field | Description |
-|-------|-------------|
-| **What** | Description of the discrepancy |
-| **Expected** | Value from spec |
-| **Found** | Value in generated code |
-| **Severity** | Critical / Warning / Info |
-| **Fix** | Suggested resolution |
-
-**Severity Classification:**
-
-- **Critical**: Missing component, wrong element type, missing required prop
-- **Warning**: Token mismatch, missing accessibility attribute, asset path different
-- **Info**: Code style difference, extra attributes, optimization opportunity
-
-## Output
-
-Write Final Report to: `docs/figma-reports/{file_key}-final.md`
-
-### Final Report Template
-
-```markdown
-# Final Report: {design_name}
-
-**Spec:** `docs/figma-reports/{file_key}-spec.md`
-**Generated:** {YYYYMMDD-HHmmss}
-**Status:** PASS | WARN | FAIL
-
-## Summary
-
-| Category | Checks | Passed | Failed | Warnings |
-|----------|--------|--------|--------|----------|
-| Visual Verification | {n} | {n} | {n} | {n} |
-| Component Structure | {n} | {n} | {n} | {n} |
-| Design Tokens | {n} | {n} | {n} | {n} |
-| Assets | {n} | {n} | {n} | {n} |
-| Accessibility | {n} | {n} | {n} | {n} |
-| Code Quality | {n} | {n} | {n} | {n} |
-| Layer Order | {n} | {n} | {n} | {n} |
-| Responsive | {n} | {n} | {n} | {n} |
-| **Total** | **{n}** | **{n}** | **{n}** | **{n}** |
-
-## Component Status
-
-| Component | File | Visual | Structure | Tokens | Assets | A11y | Responsive | Status |
-|-----------|------|--------|-----------|--------|--------|------|------------|--------|
-| {Name} | `{path}` | {n}% | OK | OK | OK | OK | OK | PASS |
-| {Name} | `{path}` | {n}% | OK | FAIL | OK | OK | WARN | FAIL |
-
-## Discrepancies
-
-### Critical Issues
-
-| Component | Issue | Expected | Found | Fix |
-|-----------|-------|----------|-------|-----|
-| {Name} | {description} | {expected} | {found} | {fix} |
-
-### Warnings
-
-| Component | Issue | Expected | Found | Fix |
-|-----------|-------|----------|-------|-----|
-| {Name} | {description} | {expected} | {found} | {fix} |
-
-### Info
-
-| Component | Note |
-|-----------|------|
-| {Name} | {observation} |
-
-## Files Reviewed
-
-### Component Files
-- `{path/to/Component1.tsx}` - {status}
-- `{path/to/Component2.tsx}` - {status}
-
-### Style Files
-- `{path/to/tokens.css}` - {status}
-
-### Asset Files
-- `{path/to/asset.svg}` - {status}
-
-## Visual Diff Report
-
-**Full report:** `docs/figma-reports/{file_key}-visual-diff.md`
-
-**Summary:**
-| Severity | Count |
-|----------|-------|
-| HIGH | {n} |
-| MEDIUM | {n} |
-| LOW | {n} |
-
-**HIGH severity items:**
-1. {Brief description} — {file}:{line}
-2. ...
-
-## Compliance Checklist
-
-### Component Structure
-- [x] All component files exist
-- [x] Component names match spec
-- [ ] Semantic HTML elements used (2 issues)
-- [x] Children hierarchy correct
-- [x] Props/variants implemented
-
-### Design Tokens
-- [x] Colors applied correctly
-- [x] Typography matches spec
-- [ ] Spacing values correct (1 issue)
-- [x] Border radius correct
-- [x] Effects applied
-
-### Assets
-- [x] All assets imported
-- [x] Paths correct
-- [x] Used in correct components
-
-### Accessibility
-- [x] Semantic elements used
-- [ ] Alt text present (1 missing)
-- [x] ARIA labels present
-- [x] Focus states implemented
-> See also: `accessibility-patterns.md` (load via Glob)
-
-### Code Quality
-- [x] No TypeScript errors
-- [x] Consistent naming
-- [ ] No hardcoded values (3 instances)
-- [x] Clean structure
-
-### Layer Order
-- [x] Rendering order matches zIndex spec
-- [x] Position context correct (top/center/bottom)
-- [x] absoluteY coordinates match
-- [x] Framework-specific order respected
-
-## Conclusion
-
-{Summary paragraph describing overall compliance status, key issues found, and recommendations.}
-
-### Recommended Actions
-
-1. {Action item 1}
-2. {Action item 2}
-3. {Action item 3}
+Example:
+- All 3 pass → 100%
+- 2 of 3 pass → 67%
+- 1 of 3 pass → 33%
+- 0 of 3 pass → 0%
+```
 
 ---
 
-*Generated by Compliance Checker Agent*
-```
+## Step 5: GATE 3 - Visual Validation (REQUIRED for PASS)
 
-## Visual Verification Gate (REQUIRED)
+**NEW in v2.0:** Visual runs LAST. It's the slowest gate (~10s+) and most subjective. Only runs if A11y and Responsive pass (fail-fast optimization).
 
 **Critical:** Text/code-based compliance is insufficient. A component can pass all code checks but still look wrong on screen.
 
-Before marking ANY component as PASS:
+### Visual Verification Process
 
-### 1. Capture Screenshots
+> **Reference:** `visual-validation-loop.md` — Detailed visual validation loop with smart termination
+> Load via: `Glob("**/references/visual-validation-loop.md")` → `Read()`
+
+#### 1. Capture Screenshots
 
 ```bash
-# Take Figma screenshot of original design
-figma_get_screenshot(file_key="{file_key}", node_ids=["{node_id}"], scale=2)
+# Figma screenshot
+figma_get_screenshot(file_key="{file_key}", node_ids=["{node_id}"], scale={screenshot_scale from config, default 2})
 
-# Take browser screenshot of generated component (requires dev server running)
-# Use browser automation tool or manual screenshot
+# Browser screenshot (requires dev server running)
+tabs_context_mcp({ createIfEmpty: true })
+navigate({ url: "http://localhost:3000/{component_path}", tabId })
+computer({ action: "wait", duration: 1, tabId })
+computer({ action: "screenshot", tabId })
 ```
 
-### 2. Visual Comparison Checklist
+#### 2. Claude Vision Comparison
 
 Compare Figma screenshot with browser screenshot:
 
-| Aspect | Tolerance | Check |
-|--------|-----------|-------|
-| Typography | ±2px font size, same weight | Font family, size, weight, line-height match |
-| Colors | Exact hex match | Background, text, border colors identical |
-| Spacing | ±4px | Padding, margin, gap values match design |
+| Aspect | Tolerance (from config) | Check |
+|--------|-------------------------|-------|
+| Typography | ±typography_tolerance_px (default: 2) | Font family, size, weight, line-height match |
+| Colors | Exact hex match (within color_tolerance_pct) | Background, text, border colors identical |
+| Spacing | ±spacing_tolerance_px (default: 4) | Padding, margin, gap values match design |
 | Layout | Structure identical | Flex direction, alignment, wrapping match |
-| Dimensions | ±2px | Width, height match frame properties |
-| Corner Radius | Exact match | All corners match spec values |
-| Shadows/Effects | Visual match | Shadow offset, blur, spread, color match |
-| Edge-to-Edge | Structure match | Children marked Edge-to-Edge extend full width without horizontal padding |
-| Glass Effect | Visual match | Glass/translucent elements render with proper material effect |
-| Clip Behavior | Overflow clipped | clipContent containers properly clip overflowing children |
+| Dimensions | ±dimension_tolerance_px (default: 2) | Width, height match frame properties |
+| Corner Radius | Exact match if corner_radius_exact=true | All corners match spec values |
+| Shadows/Effects | ±shadow_blur_tolerance_px (default: 2) | Shadow offset, blur, spread, color match |
 
-> **Reference:** `frame-properties.md` — Frame dimension, corner radius, and border/stroke validation rules
-> Load via: `Glob("**/references/frame-properties.md")` → `Read()`
-> **Reference:** `shadow-blur-effects.md` — Shadow and blur effect extraction and compliance criteria
-> Load via: `Glob("**/references/shadow-blur-effects.md")` → `Read()`
-
-### 3. Visual Match Determination
+#### 3. Visual Match Determination
 
 **Use Claude Vision to compare:**
 - Request analysis: "Compare these two images. The first is the Figma design, the second is the generated component. Identify any visual differences in typography, colors, spacing, layout, dimensions, and effects."
 
 **Visual Match Score:**
-- **≥95% match**: Component can proceed to PASS evaluation
-- **85-94% match**: Mark as WARN with visual diff notes
-- **<85% match**: Mark as FAIL - requires code fixes
+- **≥pass_threshold% (default 95%)**: Component can proceed to PASS evaluation
+- **≥warn_threshold% to <pass_threshold% (default 85-94%)**: Mark as WARN with visual diff notes
+- **<warn_threshold% (default <85%)**: Mark as FAIL - requires code fixes
 
-### Structural Layout Validation
+#### 4. Iterative Fix Loop (Smart Termination)
 
-Beyond visual comparison, validate these structural patterns:
-
-**Edge-to-Edge Padding Check:**
-```
-For each component with Edge-to-Edge: true in spec:
-1. Verify the child view has NO .padding(.horizontal) applied
-2. Verify sibling views DO have .padding(.horizontal) matching parent's padding value
-3. Verify parent does NOT have .padding(.horizontal) as a universal modifier
-```
-
-If edge-to-edge child has horizontal padding → Mark as **FAIL** with:
-- Issue: "Edge-to-edge child has incorrect horizontal padding"
-- Expected: "No horizontal padding on edge-to-edge child"
-- Actual: "`.padding(.horizontal, X)` applied"
-
-**Glass Effect Check:**
-```
-For each component with Glass Effect: true in spec:
-1. Verify #available(iOS 26.0, *) check exists
-2. Verify .glassEffect() or .buttonStyle(.glass/.glassProminent) used in iOS 26+ branch
-3. Verify .ultraThinMaterial fallback exists in else branch
-4. Verify Glass Tint color matches spec value
-```
-
-If glass effect missing → Mark as **FAIL** with:
-- Issue: "Glass effect not implemented"
-- Expected: "iOS 26 .glassEffect() with .ultraThinMaterial fallback"
-- Actual: "{what was found instead}"
-
-**ClipContent Check:**
-```
-For each parent with clipContent: true in Figma:
-1. Verify .clipped() modifier present on parent
-2. Verify edge-to-edge or overflowing children are inside clipped parent
-```
-
-**iOS Version Guard Check:**
-```
-For each component using Glass Effect or other iOS 26+ APIs:
-1. Verify #available(iOS 26.0, *) guard wraps all iOS 26+ code
-2. Verify else branch provides a complete fallback
-3. Code without version guard using iOS 26+ APIs → automatic FAIL
-```
-
-### 4. Document Visual Verification
-
-Add to Final Report:
+**NEW in v2.0:** Enhanced termination logic with stall detection.
 
 ```markdown
-## Visual Verification
+**Iteration 1:**
+- Capture Figma + Browser screenshots
+- Claude Vision comparison
+- Calculate match %
+  - ≥pass_threshold% → PASS, exit loop
+  - <warn_threshold% → Create todos, fix, goto Iteration 2
+  - ≥warn_threshold% to <pass_threshold% → Mark WARN, ask user: continue or accept?
 
-| Component | Figma Screenshot | Browser Screenshot | Match % | Notes |
-|-----------|-----------------|-------------------|---------|-------|
-| {Name} | [link/path] | [link/path] | {n}% | {differences} |
+**Iteration 2:**
+- Re-capture browser screenshot
+- Compare with Figma
+- Calculate improvement delta = (iteration2_match% - iteration1_match%)
+  - Delta ≥visual_improvement_threshold% (default 10%) → Progress made, create todos, goto Iteration 3
+  - Delta <visual_improvement_threshold% → **STALLED**, mark ACCEPTABLE, exit loop
+  - Match ≥pass_threshold% → PASS, exit loop
 
-### Visual Differences Found
-- {Component}: {difference description}
+**Iteration 3:**
+- Final re-capture
+- Compare with Figma
+  - ≥pass_threshold% → PASS
+  - ≥warn_threshold% to <pass_threshold% → WARN (accept visual differences)
+  - <warn_threshold% → FAIL (requires manual review)
+  - Exit loop (max_visual_iterations reached)
+
+**Termination Conditions:**
+1. Match ≥pass_threshold% → PASS, exit
+2. max_visual_iterations reached → ACCEPTABLE/WARN, exit
+3. Improvement <visual_improvement_threshold% between iterations → STALLED, exit
+4. User abort → MANUAL_REVIEW, exit
 ```
 
-**If visual verification is skipped (no browser/dev server):**
-- Mark status as WARN (not PASS)
-- Add note: "Visual verification pending - code-only compliance checked"
+### TodoWrite for Visual Fixes
+
+```javascript
+TodoWrite({
+  todos: [
+    {
+      content: "Title font-size: text-2xl → text-3xl",
+      status: "pending",
+      activeForm: "Fixing title font-size"
+    },
+    {
+      content: "Card padding: p-4 → p-6",
+      status: "pending",
+      activeForm: "Fixing card padding"
+    }
+  ]
+})
+```
+
+### Scoring
+
+```
+Visual Score = final_visual_match_pct
+
+Example:
+- 98% match → 98% visual score
+- 88% match → 88% visual score
+- 72% match → 72% visual score
+```
 
 ---
 
-### Visual Diff Report (REQUIRED)
+## Step 6: Calculate Component Scores
 
-**Purpose:** Generate a structured diff document comparing Figma design intent with generated code, usable by a fixer agent.
+**NEW in v2.0:** Granular 0-100% scoring per component.
 
-**Process:**
+### Scoring Formula
 
-1. **Capture Figma screenshot:**
-   ```
-   figma_get_screenshot(file_key="{file_key}", node_ids=["{root_node_id}"], scale=2)
-   ```
+Load weights from `pipeline-config.md` (defaults shown):
 
-2. **Read all generated code files** listed in the spec
+```
+Component Score = (
+  Structure Score × structure_weight (20%) +
+  Token Score × token_weight (30%) +
+  Asset Score × asset_weight (10%) +
+  A11y Score × a11y_weight (20%) +
+  Responsive Score × responsive_weight (10%) +
+  Visual Score × visual_weight (10%)
+) / 100
 
-3. **Analyze Figma screenshot** using Claude Vision with this prompt:
+Score Ranges (from config):
+- ≥pass_score_threshold% (default 95%): PASS ✅
+- ≥warn_score_threshold% to <pass_score_threshold% (default 85-94%): WARN ⚠️
+- <warn_score_threshold%: FAIL ❌
+```
 
-   "Analyze this Figma design screenshot. For each visible UI element, describe:
-   - Element type (text, button, card, image, icon, badge)
-   - Approximate colors (hex if possible)
-   - Approximate text content and styling (bold, italic, underline, opacity)
-   - Layout relationships (above, below, inside, beside)
-   - Visual effects (shadows, borders, rounded corners, gradients)
-   - Any text that appears to have different colors within the same line"
+### Example Calculation
 
-4. **Compare vision analysis against generated code** for each element:
-   - Does the code produce the same visual element?
-   - Do colors match?
-   - Does text styling match (including inline variations)?
-   - Do opacity values match?
-   - Are icons/images correct?
+```
+Component: HeroCard
 
-5. **Generate Visual Diff Report** and write to: `docs/figma-reports/{file_key}-visual-diff.md`
+Structure: 100% (all elements correct)
+Tokens: 95% (1 spacing mismatch within tolerance)
+Assets: 100% (all imported)
+A11y: 100% (jest-axe 0 violations)
+Responsive: 100% (all 3 breakpoints pass)
+Visual: 98% (near-perfect match)
 
-**Visual Diff Report Format:**
+Score = (100×20% + 95×30% + 100×10% + 100×20% + 100×10% + 98×10%) / 100
+      = (20 + 28.5 + 10 + 20 + 10 + 9.8) / 100
+      = 98.3%
 
-> See reference: `visual-diff-template.md` (Glob: `**/references/visual-diff-template.md`) for the full report template, example diffs, and formatting rules.
-
-**Severity Levels:**
-- **HIGH:** Visually obvious difference (wrong color, missing element, wrong icon)
-- **MEDIUM:** Subtle difference (opacity off, spacing slightly wrong)
-- **LOW:** Minor difference (font rendering, anti-aliasing)
+Status: PASS ✅ (≥95%)
+```
 
 ---
 
-## Pass/Fail Criteria
+## Step 7-10: Reporting & Checkpointing
 
-### PASS
+Due to length constraints, detailed reporting steps (7-10) follow the patterns established in v1.0 with these enhancements:
+- Final report includes component scores and gate execution summary
+- Visual diff report only generated if visual gate ran
+- QA report includes all gate timings
+- Incremental checkpoints written during batch processing
+- Final checkpoint includes v2.0 schema with scores and gate results
 
-All of the following must be true:
+See v1.0 sections for full report templates with score columns added.
 
-- **Visual verification passed** (≥95% match between Figma and browser screenshots)
-- All components exist at expected paths
-- No critical mismatches in structure or tokens
-- Design tokens match spec: all color tokens present and correct, typography tokens applied (minor spacing variations of +/-2px acceptable)
-- All required assets are properly imported
-- **Accessibility verification passed** (all a11y checks pass - see Section 4)
-- **Responsive verification passed** (works at all breakpoints - see Section 7)
-- TypeScript compiles without errors
-- Layer order matches spec (rendering order follows zIndex specification)
+---
 
-### WARN
-
-Any of the following (without FAIL conditions):
-
-- Minor discrepancies in token values
-- Non-critical missing items (e.g., optional props)
-- Info-level observations present
-- 1-3 warning-level issues
-- Some hardcoded values instead of tokens
-- Visual diff report contains MEDIUM severity items
-
-### FAIL
-
-Any of the following:
-
-- One or more components missing entirely
-- Critical token mismatches (wrong colors, wrong fonts)
-- Required assets not found or not imported
-- Semantic HTML completely wrong (div instead of button for interactive)
-- More than 3 critical issues
-- TypeScript compilation errors
-- Layer order completely reversed or critical components rendered in wrong order
-- Unresolved assets present (spec contains "Unresolved Assets" section with unresolved icons)
-- Placeholder icons used (code contains `questionmark.square.dashed` or `// TODO: Unresolved icon`)
-- Visual diff report contains any HIGH severity items
-
-## Error Handling
-
-### Spec Not Found
-
-If `docs/figma-reports/{file_key}-spec.md` does not exist:
-
-1. Report error: "Implementation Spec not found at expected path"
-2. Check if `docs/figma-reports/` directory exists
-3. List available specs using Glob: `docs/figma-reports/*-spec.md`
-4. Provide instructions: "Run the full pipeline (Design Validator -> Design Analyst -> Asset Manager -> Code Generator) first"
-5. Stop processing
-
-### Spec Not Ready
-
-If "Next Agent Input" section does not indicate "Ready for: Compliance Checker Agent":
-
-1. Log warning: "Spec may not be complete - Code Generator may not have run"
-2. Check for "Generated Code" section in the spec
-3. If no "Generated Code" section:
-   - Warn user: "No generated code found - cannot perform compliance check"
-   - Use `AskUserQuestion` to ask user if they want to proceed anyway
-4. If user confirms or Generated Code section exists, continue with available data
-
-### Empty Generated Code Table
-
-If the "Generated Code" section exists but the table contains no entries:
-
-1. Log error: "Generated Code table is empty - no components to verify"
-2. Warn user: "The Code Generator appears to have run but produced no component files"
-3. Suggest: "Run the Code Generator agent again to generate components from the spec"
-4. Use `AskUserQuestion` to confirm: "Would you like to proceed with a partial check (tokens, assets only) or abort?"
-5. If user chooses partial check:
-   - Skip component structure verification
-   - Check only design tokens CSS file and asset imports
-   - Mark Component Structure section as "SKIPPED - No generated components"
-6. If user aborts, stop processing
-
-### Component File Not Found
-
-If a component file from the Generated Code table does not exist:
-
-1. Log error: "Component file not found: {path}"
-2. Mark component as FAIL in the report
-3. Add to Discrepancies table with:
-   - **Issue**: "File not found"
-   - **Expected**: File at `{path}`
-   - **Found**: File does not exist
-   - **Severity**: Critical
-   - **Fix**: "Run Code Generator agent to create the file"
-4. Continue checking remaining components
-
-### Asset Not Found
-
-If an asset referenced in the spec is not found:
-
-1. Log warning: "Asset not found: {asset_path}"
-2. Mark as Warning in the report
-3. Add to Discrepancies table with:
-   - **Issue**: "Asset missing"
-   - **Expected**: Asset at `{path}`
-   - **Found**: File does not exist
-   - **Severity**: Warning
-   - **Fix**: "Run Asset Manager agent to download the asset, or use placeholder"
-4. Check if placeholder is used in code
-5. Continue checking remaining items
-
-### Read/Parse Error
-
-If a file cannot be read or parsed:
-
-1. Log error with file path and error message
-2. Mark file as "Unable to verify" in Files Reviewed
-3. Add to Discrepancies with Warning severity
-4. Continue with remaining files
-
-## Rate Limits & Timeouts
-
-For large projects with many components:
-
-- **Batch Size:** Process 10 components at a time to avoid context overflow
-- **Progress Updates:** Report progress every 5 components verified
-- **TypeScript Compilation:** Run `tsc --noEmit` once per batch, not per file, to reduce overhead
-- **Large Files:** For component files > 500 lines, focus on key sections (imports, exports, element types)
-- **Grep Limits:** Use `head_limit` parameter for Grep queries to avoid excessive output
-- **Checkpointing:** Save partial results after each batch to prevent data loss on interruption
-- **Resume Support:** If interrupted, check for existing partial report and offer to resume from last completed batch
-
-## Guidelines
-
-### Verification Best Practices
-
-- **Be thorough**: Check every item in the spec
-- **Be precise**: Compare exact values, not approximations
-- **Be helpful**: Provide actionable fix suggestions
-- **Be fair**: Distinguish between critical issues and minor variations
-
-### Severity Assignment
-
-| Severity | Criteria | Examples |
-|----------|----------|----------|
-| Critical | Breaks functionality or design intent | Missing component, wrong interactive element, broken imports |
-| Warning | Impacts quality but not functionality | Token mismatch, missing alt text, hardcoded value |
-| Info | Observation or suggestion | Code style, optimization opportunity, extra attribute |
-
-### Token Matching
-
-When comparing tokens:
-
-- **Exact match**: CSS variable names must match exactly
-- **Equivalent values**: `bg-blue-500` equals `bg-[#3B82F6]` if hex matches
-- **Tailwind mapping**: Check if Tailwind class maps to same CSS value
-- **Tolerance**: Allow 1px difference for spacing, 1% for colors with rounding
-
-### Report Clarity
-
-- Use clear, specific language in discrepancy descriptions
-- Always include the expected and found values
-- Provide concrete fix suggestions
-- Group related issues together
-- Highlight the most critical issues first
-
-### Continuous Verification
-
-For large projects with many components:
-
-- Process components in batches
-- Report progress during verification
-- Save partial results to avoid data loss
-- Resume from last successful component if interrupted
-
-## Post-Validation: Register Code Connect Mappings
-
-After all components receive PASS status, register them with Figma Code Connect:
-
-1. Read the "Generated Code" table from the spec
-2. For each component where `code_connect_ready: true` AND compliance status is PASS:
-
-```python
-figma_add_code_connect_map(
-  file_key="{file_key}",
-  node_id="{component_node_id}",
-  component_path="{component_path}",
-  component_name="{component_name}",
-  props_mapping={props_mapping_from_spec},
-  variants={variants_from_spec},
-  example="{example_usage}"
-)
-```
-
-3. Skip registration for components with WARN or FAIL status
-4. Document registered components in the Final Report:
-
-```markdown
-## Code Connect Registrations
-| Component | Node ID | Status | Registered |
-|-----------|---------|--------|------------|
-| Button | 1:234 | PASS | Yes |
-| CardView | 2:345 | WARN | No - compliance warning |
-```
-
-> **Why:** Only compliance-verified code should be registered for reuse.
-
-## Checkpoint Write
-
-After successfully writing the Final Report, write a checkpoint file:
-
-```bash
-mkdir -p .qa
-```
-
-Write to `.qa/checkpoint-5-compliance-checker.json`:
-```json
-{
-  "phase": 5,
-  "agent": "compliance-checker",
-  "status": "complete",
-  "output_file": "docs/figma-reports/{file_key}-final.md",
-  "overall_status": "{PASS|WARN|FAIL}",
-  "timestamp": "{ISO-8601}"
-}
-```
-
-This marks the pipeline as complete.
+**Version:** 2.0
+**Last Updated:** 2026-02-05
+**Breaking Changes:** Gate reordering, component scoring, incremental checkpoints

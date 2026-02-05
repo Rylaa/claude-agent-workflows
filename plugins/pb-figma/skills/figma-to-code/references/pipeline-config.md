@@ -49,6 +49,68 @@ This document defines configurable values used across the pipeline. When the ski
 | contrast_ratio_normal | 4.5 | WCAG AA contrast ratio for normal text |
 | contrast_ratio_large | 3.0 | WCAG AA contrast ratio for large text |
 
+### Compliance Tolerance
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| typography_tolerance_px | 2 | Font size tolerance in pixels (±) |
+| spacing_tolerance_px | 4 | Padding/margin tolerance in pixels (±) |
+| color_tolerance_pct | 1 | Color match tolerance percentage |
+| dimension_tolerance_px | 2 | Width/height tolerance in pixels (±) |
+| corner_radius_exact | true | Corner radius must match exactly (no tolerance) |
+| shadow_blur_tolerance_px | 2 | Shadow blur/spread tolerance in pixels (±) |
+| opacity_tolerance_pct | 5 | Opacity tolerance percentage |
+
+### Gate Orchestration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| gate_order | accessibility,responsive,visual | Order of gate execution (fail-fast) |
+| fail_fast_enabled | true | Stop execution on first gate failure |
+| max_visual_iterations | 3 | Maximum visual verification loop iterations |
+| visual_improvement_threshold | 10 | Minimum % improvement between iterations to continue |
+| stall_detection_enabled | true | Exit loop if improvement < threshold |
+
+### Component Scoring
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| structure_weight | 20 | Structure score weight (%) |
+| token_weight | 30 | Design token score weight (%) |
+| asset_weight | 10 | Asset score weight (%) |
+| a11y_weight | 20 | Accessibility score weight (%) |
+| responsive_weight | 10 | Responsive score weight (%) |
+| visual_weight | 10 | Visual match score weight (%) |
+| pass_score_threshold | 95 | Minimum score for PASS (%) |
+| warn_score_threshold | 85 | Minimum score for WARN (%) |
+
+### Framework-Specific Overrides
+
+#### SwiftUI
+
+| Setting | Value | Reason |
+|---------|-------|--------|
+| typography_tolerance_px | 1 | SwiftUI font rendering more precise |
+| dimension_tolerance_px | 0 | Frame sizes explicit in code |
+| spacing_tolerance_px | 2 | SwiftUI padding more precise |
+
+#### React/Tailwind
+
+| Setting | Value | Reason |
+|---------|-------|--------|
+| spacing_tolerance_px | 4 | Tailwind spacing scale (rem → px conversion) |
+| typography_tolerance_px | 2 | Browser rendering variations |
+| dimension_tolerance_px | 2 | Flexbox calculation variations |
+
+### Incremental Checkpointing
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| checkpoint_batch_size | 10 | Components per checkpoint write |
+| checkpoint_on_gate_complete | true | Write checkpoint after each gate |
+| auto_resume_on_restart | true | Prompt to resume from last checkpoint |
+| checkpoint_retention_hours | 48 | Keep checkpoint files for N hours |
+
 ---
 
 ## Overriding Defaults
