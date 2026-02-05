@@ -392,7 +392,7 @@ Before creating batches, deduplicate assets by `node_id`:
 - Result: unique node_id list used for all export calls
 - After download, all components referencing the same node_id share the single downloaded file
 
-- Batch up to 10 assets per API call
+- Batch up to 5 assets per API call (matches rate limit guidance in section "Rate Limits & Timeouts")
 - Group by format (SVG batch, PNG batch)
 - Process synchronously to avoid rate limits
 
