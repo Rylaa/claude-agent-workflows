@@ -2,6 +2,16 @@
 
 All notable changes to the pb-figma plugin will be documented in this file.
 
+## [1.18.0] - 2026-02-06
+
+### Changed
+- **MCP Server** - Updated to pixelbyte-figma-mcp>=3.2.15,<4.0.0 (added upper bound for stability)
+- **Package Version Sync** - Synchronized local MCP package version from 2.5.0 to 3.2.15 to match PyPI release
+- **Plugin Version** - Bumped to 1.18.0 for dependency update
+
+### Fixed
+- **Version Inconsistency** - Resolved version mismatch between local package (2.5.0) and runtime constraint (3.2.13+)
+
 ## [1.17.0] - 2026-02-05
 
 ### Added
