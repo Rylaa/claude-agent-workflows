@@ -2,6 +2,32 @@
 
 All notable changes to the pb-figma plugin will be documented in this file.
 
+## [1.17.0] - 2026-02-05
+
+### Added
+- **Inline Text Variations (React)** - React code generator now handles `characterStyleOverrides` for multi-color/multi-style inline text using `<span>` segments
+- **Dependency-Aware Fan-Out Batching** - SKILL.md pipeline now groups parent+children components in same batch during parallel code generation (batch_size=4)
+- **Pipeline Handoff Contract Validation** - All 5 pipeline agents now validate input contract (spec existence, required sections) before processing
+- **Optional Test Generation Step** - React (Jest/RTL) and SwiftUI (XCTest) code generators include Step 12 for component test scaffolding
+- **Component Dependencies in Subset Mode** - code-generator-base documents cross-batch dependency resolution for fan-out execution
+
+### Changed
+- **Code Connect Registration Timing** - Moved from Phase 4 (code-gen) to Phase 5 (compliance-checker post-validation) to ensure only verified components are registered
+- **pipeline-handoff.md** - Now referenced by all 5 agents (was unreferenced); header updated accordingly
+- **docs-index.md** - Updated "Used By" columns for pipeline-handoff and inline-text-variations entries
+
+### Fixed
+- **Asset Manager Batch Size** - Standardized to 5 assets per API call
+- **Asset Manager Classification** - Spec-first classification, MCP only when ambiguous; resolved SIMPLE_ICON vs COMPLEX_VECTOR overlap
+- **Asset Manager Node Dedup** - Added node_id deduplication before batch download
+- **Asset Manager SVG Detection** - Made SVG fill detection mandatory step
+- **Asset Manager Flagged Frames** - Added explicit flagged frame processing workflow and validation checklist
+- **Asset Manager Table Format** - Unified Downloaded Assets table format matching code-gen expectations
+
+### Improved
+- **Compliance Checker v2.0** - Major optimizations for FAZ-5 phase
+- **MCP Server** - Updated to pixelbyte-figma-mcp>=3.2.13
+
 ## [1.15.1] - 2026-01-30
 
 ### Fixed
