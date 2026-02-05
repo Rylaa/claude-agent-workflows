@@ -452,9 +452,15 @@ Use `TodoWrite` to track validation progress through these steps:
    - Save to: `docs/figma-reports/{file_key}-{YYYYMMDD-HHmmss}.png`
 4. **Extract Tokens** - Use `figma_get_design_tokens` for colors, typography, spacing
 5. **List Assets** - Use `figma_list_assets` to catalog images, icons, vectors
-6. **Classify Duplicate Icons** - See reference: `asset-classification-guide.md` (Glob: `**/references/asset-classification-guide.md`)
+6. **Classify & Deduplicate Icons** - See reference: `asset-classification-guide.md` (Glob: `**/references/asset-classification-guide.md`)
    - Determine icon position (leading=thematic, trailing=status)
    - Add `iconPosition` and `iconType` fields to asset inventory
+   - **Deduplication:** When multiple icons share the same name:
+     1. Query each icon's parent card/container via `figma_get_node_details`
+     2. Generate unique name using parent context: `{parent-name}-{icon-role}`
+     3. Example: `Frame 2121316303` x3 → `card1-checkmark`, `card2-checkmark`, `card3-checkmark`
+   - **Naming priority:** icon-library-name > parent-context-name > position-index-name
+   - Every icon in Assets Inventory MUST have a unique `Asset` name
 7. **Deep Inspection** - For each component:
    - Call `figma_get_node_details` for the component frame
    - For each child frame within the component, call `figma_get_node_details` to extract:
@@ -577,13 +583,18 @@ When gradient fills are detected in any node, include detailed gradient informat
 
 > **CRITICAL:** Every asset listed here MUST be used as-is in the generated code. Code generators MUST NOT substitute downloaded assets with library icons (lucide-react, heroicons, etc.) even if a "similar" icon exists in the library. Library icons are ONLY acceptable as fallback when no downloaded asset exists.
 
-| Asset | Type | Node ID | Export Format | Position | Icon Type | Has Export Settings | Must-Use |
-|-------|------|---------|---------------|----------|-----------|---------------------|----------|
-| logo | image | 1:234 | SVG | - | - | No | YES |
-| hero-bg | image | 1:567 | PNG | - | - | No | YES |
-| bar-chart | illustration | 6:34 | PNG | - | - | Yes | YES |
-| card-icon-1 | icon | 1:890 | SVG | leading | THEMATIC | No | YES |
-| card-check-1 | icon | 1:891 | SVG | trailing | STATUS_INDICATOR | No | YES |
+| Asset | Type | Node ID | Figma Name | Export Name | Position | Icon Type | Has Export Settings | Must-Use |
+|-------|------|---------|------------|-------------|----------|-----------|---------------------|----------|
+| logo | image | 1:234 | Logo | logo.svg | - | - | No | YES |
+| hero-bg | image | 1:567 | HeroBackground | hero-bg.png | - | - | No | YES |
+| bar-chart | illustration | 6:34 | BarChart | bar-chart.png | - | - | Yes | YES |
+| card1-icon | icon | 1:890 | weui:time-filled | icon-time-filled.svg | leading | THEMATIC | No | YES |
+| card1-check | icon | 1:891 | Frame 2121316303 | card1-checkmark.svg | trailing | STATUS_INDICATOR | No | YES |
+| card2-icon | icon | 1:895 | streamline:flask | icon-flask.svg | leading | THEMATIC | No | YES |
+| card2-check | icon | 1:896 | Frame 2121316303 | card2-checkmark.svg | trailing | STATUS_INDICATOR | No | YES |
+
+> **Dedup rule:** Figma Name is the raw node name. Asset and Export Name are guaranteed unique across the inventory.
+> **Must-Use:** All assets marked YES — code generators MUST NOT substitute with library icons.
 
 ## Node Hierarchy
 ```

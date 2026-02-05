@@ -30,6 +30,7 @@ Load these references when needed:
 - Image with text: `image-with-text.md` → Glob: `**/references/image-with-text.md`
 - Layer order & hierarchy: `layer-order-hierarchy.md` → Glob: `**/references/layer-order-hierarchy.md`
 - Error recovery: `error-recovery.md` → Glob: `**/references/error-recovery.md`
+- Pipeline config: `pipeline-config.md` → Glob: `**/references/pipeline-config.md`
 
 ## Data Source Priority
 
@@ -38,23 +39,27 @@ When extracting design properties, ALWAYS follow this priority order:
 1. **Read from Validation Report FIRST** — The following data is pre-extracted:
    - Frame dimensions (Width, Height) → Frame Properties table
    - Absolute coordinates (X, Y) → Frame Properties table
+   - **Children array order (Child Index)** → Frame Properties table + Children Array Order table
    - Corner radius and borders → Frame Properties table
    - Auto Layout properties → Auto Layout Properties table
+   - **Nested frame dimensions and inner layout** → Nested Frames table
    - Colors, typography, spacing → Design Tokens section
+   - **Per-node text properties (decoration, auto-resize, weight, letter-spacing)** → Text Node Properties table
    - Asset inventory and icon classification → Assets Inventory
    - Text decorations and style overrides → Inline Text Variations table
    - Gradient details → Gradient Details table
-   - Text auto-resize → Text Auto-Resize Properties table
 
 2. **Only call Figma MCP if data is MISSING** from the validation report — Check the report first. If a property is not present, then and only then call `figma_get_node_details`.
 
 3. **Never re-query these properties** (already in validation report):
    - Frame dimensions and coordinates
+   - **Children array order and Child Index**
    - Corner radius values
    - Border/stroke properties
+   - **Nested frame dimensions (inner card layouts)**
    - Card icon node IDs and classification
    - Character style overrides
-   - Text decoration values
+   - **Text node properties (decoration, auto-resize, font-weight, letter-spacing)**
    - Gradient stop data
 
 > **Performance impact:** Following this priority reduces API calls by ~70% and significantly speeds up the pipeline.
@@ -95,23 +100,29 @@ Use `TodoWrite` to track analysis progress through these steps:
 2. **Verify Report Status** - Check status field and note any limitations
    - If PASS/WARN: Proceed normally with full analysis
    - If FAIL: Log warning, document failures, continue with available data
-3. **Analyze Component Structure** - Break down the node hierarchy into components
-3b. **Check Code Connect Mappings** - Look up existing component-to-code mappings
-4. **Determine Implementation Strategy** - Plan semantic HTML, layout methods, responsive behavior
-5. **Map Design Tokens** - Convert tokens to CSS custom properties and Tailwind classes
-6. **Document Asset Requirements** - List all required assets with optimization notes
-7. **Validate Card Icons** - For card/list components, verify icon node IDs:
-   - Check if Validation Report has duplicate-named assets
-   - If yes, use `figma_get_node_details` to query card children
-   - Classify icons by position (leading=thematic, trailing=status)
-   - Use LEADING icon node IDs for card action icons
-8. **Capture Layer Order** - Extract z-index hierarchy from Figma using absoluteBoundingBox coordinates
-9. **Create Implementation Checklist** - Generate actionable tasks for developers
-10. **Ensure Output File Exists** - Before writing, create file if needed:
+3. **Analyze Component Hierarchy** - Break down the node hierarchy into component tree (flat → tree)
+4. **Check Code Connect Mappings** - Look up existing component-to-code mappings via `figma_get_code_connect_map`
+5. **Map Frame Properties** - Copy dimensions, corner radius, border from Validation Report to each component
+   - Read `Child Index` from Frame Properties table and `Nested Frames` table directly (no MCP call needed)
+6. **Map Card Icons from Validation Report** - For card/list components:
+   - Read icon entries from Validation Report Assets Inventory (pre-classified with unique names)
+   - Icons are already deduplicated and classified (leading/trailing, THEMATIC/STATUS_INDICATOR)
+   - Map each card's leading THEMATIC icon to the component's Asset Children
+   - **Only call `figma_get_node_details`** if an icon has `[FALLBACK]` tag or `(not identified)` name
+   - Skip the 4-step validation (parent hierarchy, size, fill type) — FAZ 1 already performed this
+7. **Detect Glass Effects** - Identify low-opacity fills (≤0.3) with corner radius → mark Glass Effect
+8. **Detect Edge-to-Edge Children** - Compare child width to parent width (±4px tolerance) → mark Edge-to-Edge
+9. **Capture Layer Order** - Read `Child Index` from Validation Report's Children Array Order table → `zIndex = (childIndex + 1) * 100`
+   - No MCP call needed — FAZ 1 now provides childIndex in both Frame Properties and Children Array Order tables
+10. **Map Auto Layout to Responsive Strategy** - Convert auto-layout to CSS/Tailwind/SwiftUI + breakpoint table
+11. **Map Design Tokens** - Convert colors, typography, spacing, effects to framework-specific values
+    - Read per-node text properties (decoration, auto-resize, weight, letter-spacing) from Text Node Properties table
+12. **Document Asset Requirements** - List all assets with format, optimization notes, and inline text variations
+13. **Write Implementation Spec** - Ensure output directory exists, write to `docs/figma-reports/{file_key}-spec.md`
     ```bash
     mkdir -p docs/figma-reports && touch docs/figma-reports/{file_key}-spec.md
     ```
-11. **Write Implementation Spec** - Output to `docs/figma-reports/{file_key}-spec.md`
+14. **Write Checkpoint** - Write `.qa/checkpoint-2-design-analyst.json` with status and metrics
 
 ## Analysis Process
 
@@ -485,6 +496,32 @@ For each component, determine:
 - **Fill container**: Element stretches to parent (`flex-1`, `w-full`)
 - **Hug contents**: Element sizes to content (`w-fit`, `h-fit`)
 - **Min/Max constraints**: Responsive boundaries (`min-w-X`, `max-w-X`)
+
+#### Breakpoint Strategy
+
+> **Reference:** `pipeline-config.md` — Default responsive breakpoints and visual validation thresholds.
+> Load via: `Glob("**/references/pipeline-config.md")` → `Read()`
+
+For each container-level component, document responsive behavior at each breakpoint:
+
+**Default Breakpoints** (from pipeline-config.md):
+- **mobile** (375px): Primary design viewport
+- **tablet** (768px): Tablet/iPad viewport
+- **desktop** (1440px): Desktop viewport
+
+**Responsive Strategy Table (add to each container component):**
+
+| Breakpoint | Width Behavior | Layout Change | Notes |
+|------------|---------------|---------------|-------|
+| mobile (375px) | full-width | single column | Primary design target |
+| tablet (768px) | max-width: {figma_width}px, centered | same | Center with padding |
+| desktop (1440px) | max-width: {figma_width}px, centered | same | No stretch beyond design width |
+
+**Decision Rules:**
+- If component `constraints.horizontal: STRETCH` → full-width at all breakpoints
+- If component has fixed width close to 375px (±20px) → full-width on mobile, centered on tablet/desktop
+- If component has fixed width > 500px → consider responsive scaling
+- Always default to mobile-first: the Figma design IS the mobile breakpoint
 
 #### State Variations
 Document all visual states:
@@ -1093,6 +1130,15 @@ layerOrder:
 
 **Critical:** Layer order determines visual stacking. Code generators MUST respect this ordering to achieve pixel-perfect match with Figma design.
 
+## Responsive Strategy
+
+**Design viewport:** {figma_frame_width}px (mobile)
+**Breakpoints:** 375px / 768px / 1440px
+
+| Component | Mobile (375) | Tablet (768) | Desktop (1440) |
+|-----------|-------------|--------------|----------------|
+| {ComponentName} | {behavior} | {behavior} | {behavior} |
+
 ## Components
 
 ### {ComponentName}
@@ -1198,6 +1244,7 @@ layerOrder:
 - [ ] Design Tokens extracted and mapped
 - [ ] Asset List generated with all required assets
 - [ ] **Flagged for LLM Review section copied from Validation Report (if exists)**
+- [ ] **Responsive Strategy section complete with breakpoint behaviors**
 
 **If Layer Order is missing or incomplete:** Query Figma API again with `figma_get_node_details` for all children nodes to extract absoluteBoundingBox coordinates.
 
@@ -1352,8 +1399,45 @@ Write to `.qa/checkpoint-2-design-analyst.json`:
   "agent": "design-analyst",
   "status": "complete",
   "output_file": "docs/figma-reports/{file_key}-spec.md",
-  "timestamp": "{ISO-8601}"
+  "timestamp": "{ISO-8601}",
+  "metrics": {
+    "mcp_calls": 0,
+    "cache_hits": 0,
+    "cache_misses": 0,
+    "components_analyzed": 0,
+    "assets_mapped": 0,
+    "glass_effects_detected": 0,
+    "edge_to_edge_detected": 0,
+    "icons_validated": 0,
+    "icons_fallback_queried": 0,
+    "validation_report_fields_used": 0,
+    "validation_report_fields_missing": 0
+  }
 }
 ```
 
-This enables pipeline resume from Phase 3 if later phases fail.
+**Metrics Collection Rules:**
+
+During analysis, track these counters:
+
+| Metric | When to Increment |
+|--------|-------------------|
+| `mcp_calls` | Every `figma_get_node_details`, `figma_get_file_structure`, or `figma_get_code_connect_map` call |
+| `cache_hits` | Every time data is read from Validation Report instead of calling MCP |
+| `cache_misses` | Every time MCP is called because Validation Report lacked the data |
+| `components_analyzed` | Each component added to the Component Hierarchy |
+| `assets_mapped` | Each asset entry in Assets Required table |
+| `glass_effects_detected` | Each component marked with Glass Effect: true |
+| `edge_to_edge_detected` | Each component marked with Edge-to-Edge: true |
+| `icons_validated` | Each icon successfully mapped from Validation Report |
+| `icons_fallback_queried` | Each icon that required `figma_get_node_details` fallback |
+| `validation_report_fields_used` | Count of distinct fields read from Validation Report |
+| `validation_report_fields_missing` | Count of fields that were expected but missing from Validation Report |
+
+**Usage:** These metrics help identify:
+- **High `cache_misses`** → FAZ 1 needs to extract more data
+- **High `icons_fallback_queried`** → FAZ 1 icon detection needs improvement
+- **High `mcp_calls`** → Performance optimization opportunity
+- **`validation_report_fields_missing` > 0** → Data contract gap between FAZ 1 and FAZ 2
+
+This enables pipeline resume from Phase 3 if later phases fail, and provides observability into agent performance.
