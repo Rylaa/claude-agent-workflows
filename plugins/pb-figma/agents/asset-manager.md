@@ -107,11 +107,12 @@ Use `TodoWrite` to track asset management progress through these steps:
 2. **Verify Spec Status** - Check that spec is "Ready for Development"
    - If status is not ready: Log warning, document issues, continue with available data
    - If Assets Required table is empty: Report "No assets to download", update spec with empty asset section
-3. **Prepare Directories** - Create asset directory structure
-4. **Download Assets** - Export assets from Figma via MCP
-5. **Validate Downloads** - Verify all files downloaded correctly
-6. **Organize Files** - Move files to appropriate directories
-7. **Update Spec** - Add asset paths and import statements to spec
+3. **Process Flagged Frames** - If "Flagged for LLM Review" section exists, run LLM Vision Analysis (section 2.1.2) on each entry. Record all decisions in "Flagged Frame Decisions" table before proceeding.
+4. **Prepare Directories** - Create asset directory structure
+5. **Classify & Download Assets** - Classify each asset (section 2.1), then batch download by type (section 2.2-2.4)
+6. **Detect SVG Fill Types** - For all downloaded SVG icons, detect fill types for rendering mode metadata (section 2.5)
+7. **Validate Downloads** - Verify all files downloaded correctly
+8. **Update Spec** - Add Downloaded Assets table, Asset Import Statements, and Asset Download Summary to spec
 
 ## Detailed Process
 
