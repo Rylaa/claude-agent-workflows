@@ -6,6 +6,7 @@ tools:
   - Write
   - Bash
   - Glob
+  - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_get_node_details
   - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_get_screenshot
   - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_export_assets
   - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_get_images
@@ -364,6 +365,15 @@ figma_get_images:
    - Image fills (separate API) - different endpoint
 
 **Batching Rules:**
+
+**Deduplication (before batching):**
+Before creating batches, deduplicate assets by `node_id`:
+- Build a map: `{ node_id → first asset entry from "Assets Required" }`
+- If a node_id appears multiple times (same icon used in multiple components), keep only the first entry
+- Log skipped duplicates: `"Dedup: skipping duplicate node {node_id} ({asset_name}) - already queued"`
+- Result: unique node_id list used for all export calls
+- After download, all components referencing the same node_id share the single downloaded file
+
 - Batch up to 10 assets per API call
 - Group by format (SVG batch, PNG batch)
 - Process synchronously to avoid rate limits
