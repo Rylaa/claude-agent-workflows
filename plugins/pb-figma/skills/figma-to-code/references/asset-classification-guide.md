@@ -6,8 +6,8 @@
 
 | Type | Criteria | Download Format |
 |------|----------|-----------------|
-| **SIMPLE_ICON** | Single vector, <10 child vectors, 16-48px | SVG, scale: 1 |
-| **COMPLEX_VECTOR** | ≥3 vector children OR >50px dimension | PNG, scale: 2 |
+| **SIMPLE_ICON** | <10 child vectors AND ≤50px max dimension | SVG, scale: 1 |
+| **COMPLEX_VECTOR** | ≥10 vector children OR >50px max dimension | PNG, scale: 2 |
 | **CHART_ILLUSTRATION** | Has exportSettings | PNG, scale: 2 |
 | **RASTER_IMAGE** | Image fill or photo | PNG (original) |
 | **IMAGE_FILL** | Node has imageRef property | Use figma_get_images |

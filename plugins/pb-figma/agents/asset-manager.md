@@ -764,15 +764,16 @@ After successfully updating the Implementation Spec with Downloaded Assets, writ
 mkdir -p .qa
 ```
 
-Write to `.qa/checkpoint-3-asset-manager.json`:
+Write to `.qa/checkpoint-3-asset-manager.json` (replace `{placeholders}` with actual values; numeric fields must be integers, not strings):
 ```json
 {
   "phase": 3,
   "agent": "asset-manager",
   "status": "complete",
   "output_file": "docs/figma-reports/{file_key}-spec.md",
-  "assets_downloaded": "{count}",
-  "assets_failed": "{count}",
+  "assets_downloaded": 0,
+  "assets_failed": 0,
+  "flagged_frames_resolved": 0,
   "timestamp": "{ISO-8601}"
 }
 ```
