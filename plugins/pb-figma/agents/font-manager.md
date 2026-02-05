@@ -83,6 +83,35 @@ Use `TodoWrite` to track font management progress:
 > **Reference:** `font-handling.md` — Font weight mapping, platform-specific usage, and fallback strategies
 > Load via: `Glob("**/references/font-handling.md")` → `Read()`
 
+### Step 0: Verify Validation Report Exists
+
+Before attempting to parse typography data, verify that the required validation report file exists:
+
+```bash
+# Check if validation report exists
+VALIDATION_REPORT="docs/figma-reports/{file_key}-validation.md"
+
+if [ ! -f "$VALIDATION_REPORT" ]; then
+  echo "ERROR: Validation report not found at: $VALIDATION_REPORT"
+  echo ""
+  echo "The font-manager agent requires a validation report to extract typography information."
+  echo ""
+  echo "To generate the required validation report, run:"
+  echo "  design-validator agent with file_key: {file_key}"
+  echo ""
+  echo "If you have a checkpoint file, you can also check:"
+  ls -la docs/figma-reports/*-checkpoint.json 2>/dev/null || echo "  No checkpoint files found"
+  exit 1
+fi
+
+echo "✓ Validation report found: $VALIDATION_REPORT"
+```
+
+**Error Handling:**
+- If file is missing, provide clear instructions to run `design-validator` first
+- Check for checkpoint files to suggest recovery options
+- Exit early with actionable error message rather than failing during parsing
+
 ### Step 1: Parse Typography from Validation Report
 
 ```
