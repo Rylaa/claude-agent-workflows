@@ -444,13 +444,10 @@ After downloading SVG icons, detect fill types and document in the Downloaded As
    | `fill="#XXXXXX"` (hardcoded) | No | `.renderingMode(.original)` |
    | Multiple different fills | No | `.renderingMode(.original)` |
 
-3. **Document in Downloaded Assets table:**
-   ```markdown
-   | Asset | Local Path | Fill Type | Template Compatible |
-   |-------|------------|-----------|---------------------|
-   | icon-clock.svg | `public/assets/icons/icon-clock.svg` | #F2F20D | No - use .original |
-   | icon-search.svg | `public/assets/icons/icon-search.svg` | none | Yes - use .template |
-   ```
+3. **Document in Downloaded Assets table** (see unified format in section 5):
+   - `Fill Type`: The detected fill value (`none`, `currentColor`, `#XXXXXX`, or `multiple`)
+   - `Template Compatible`: `Yes - use .template` or `No - use .original`
+   - Non-SVG assets get `n/a` for both columns
 
 **Optional: Convert SVGs to template-ready (only if user explicitly requests):**
 
@@ -519,11 +516,12 @@ Add after the existing "Assets Required" section:
 ```markdown
 ## Downloaded Assets
 
-| Asset | Local Path | Size | Status |
-|-------|------------|------|--------|
-| Logo | `public/assets/icons/logo.svg` | 2.4 KB | OK |
-| Hero Image | `public/assets/images/hero-image.png` | 145 KB | OK |
-| Search Icon | `public/assets/icons/icon-search.svg` | 1.1 KB | OK |
+| Asset | Local Path | Format | Size | Fill Type | Template Compatible | Status |
+|-------|------------|--------|------|-----------|---------------------|--------|
+| logo | `public/assets/icons/logo.svg` | SVG | 2.4 KB | none | Yes - use .template | OK |
+| hero-image | `public/assets/images/hero-image.png` | PNG | 145 KB | n/a | n/a | OK |
+| icon-search | `public/assets/icons/icon-search.svg` | SVG | 1.1 KB | none | Yes - use .template | OK |
+| icon-clock | `public/assets/icons/icon-clock.svg` | SVG | 0.8 KB | #F2F20D | No - use .original | OK |
 ```
 
 #### Asset Import Statements
@@ -569,9 +567,9 @@ Modify the Implementation Spec at: `docs/figma-reports/{file_key}-spec.md`
 ```markdown
 ## Downloaded Assets
 
-| Asset | Local Path | Size | Status |
-|-------|------------|------|--------|
-| {asset_name} | `{local_path}` | {file_size} | {OK/FAILED/WARN} |
+| Asset | Local Path | Format | Size | Fill Type | Template Compatible | Status |
+|-------|------------|--------|------|-----------|---------------------|--------|
+| {asset_name} | `{local_path}` | {SVG/PNG} | {file_size} | {none/#XXXXXX/n/a} | {Yes - use .template/No - use .original/n/a} | {OK/FAILED/WARN} |
 
 ## Asset Import Statements
 
