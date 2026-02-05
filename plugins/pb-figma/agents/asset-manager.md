@@ -394,9 +394,9 @@ done
 
 **Note:** URLs from Figma are temporary (valid for ~30 days). Download promptly after export.
 
-#### 2.5 SVG Icon Template Mode Preparation
+#### 2.5 SVG Fill Type Detection (Required for All Platforms)
 
-When downloading SVG icons for SwiftUI/iOS, prepare them for proper rendering mode compatibility.
+After downloading SVG icons, detect fill types and document in the Downloaded Assets table. Code generators across ALL platforms depend on this metadata (SwiftUI for renderingMode, React for pattern selection).
 
 **Problem:** SVG icons may have hardcoded `fill="#XXXXXX"` attributes that conflict with SwiftUI's `.renderingMode(.template)`.
 
@@ -425,7 +425,9 @@ When downloading SVG icons for SwiftUI/iOS, prepare them for proper rendering mo
    | icon-search.svg | `public/assets/icons/icon-search.svg` | none | Yes - use .template |
    ```
 
-**Optional: Convert to template-ready (if requested by user):**
+**Optional: Convert SVGs to template-ready (only if user explicitly requests):**
+
+> **Note:** Steps 1-3 above (detection and documentation) are MANDATORY. Only this conversion step (replacing fills with currentColor) is optional.
 
 ```bash
 # Replace hardcoded fills with "currentColor" for template mode
