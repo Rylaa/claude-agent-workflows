@@ -52,7 +52,7 @@ For each node and its children, verify:
 ### 1. Structure
 - [ ] File structure retrieved successfully
 - [ ] Target node exists and is accessible
-- [ ] Node hierarchy is complete (all children loaded)
+- [ ] Node hierarchy is complete (all children loaded via tiered depth strategy)
 - [ ] Auto Layout is used (WARN if absolute positioning)
 - [ ] **Auto Layout properties extracted** (layoutMode, axis alignment, padding, spacing, constraints)
 - [ ] **Min/Max dimensions captured** (minWidth, maxWidth, minHeight, maxHeight)
@@ -381,7 +381,11 @@ if (layoutMode !== "NONE") {
 Use `TodoWrite` to track validation progress through these steps:
 
 1. **Parse URL** - Extract `file_key` and `node_id`
-2. **Get Structure** - Use `figma_get_file_structure` with depth=3 (max). For large files, use `node_id` to target specific sections.
+2. **Get Structure** - Use a **tiered depth strategy** to get complete hierarchy without exceeding response limits:
+   - **Step 2a:** Call `figma_get_file_structure` with `depth=2` for the overview (page and top-level frames).
+   - **Step 2b:** For each top-level frame identified, call `figma_get_file_structure` with `node_id={frame_id}` and `depth=5` to get the full subtree.
+   - **Step 2c:** If any subtree call fails with a size error, reduce to `depth=3` for that subtree and use `figma_get_node_details` for deeper nodes individually.
+   - This approach avoids the 256KB response limit while capturing the complete node hierarchy.
 3. **Get Screenshot** - Capture visual reference with `figma_get_screenshot`
    - Save to: `docs/figma-reports/{file_key}-{YYYYMMDD-HHmmss}.png`
 4. **Extract Tokens** - Use `figma_get_design_tokens` for colors, typography, spacing
@@ -540,13 +544,23 @@ If design tokens cannot be extracted:
 
 ### Large File Handling
 
-If `figma_get_file_structure` returns a size error:
-1. Reduce depth: try depth=2, then depth=1
-2. Target specific node: use `node_id` parameter to query subtree only
-3. Use markdown format: set `response_format="markdown"` (smaller than JSON)
-4. Split queries: query each top-level frame separately
+Use the **tiered depth strategy** from Process Step 2. If individual subtree calls still fail:
 
-For files with many nodes (>100), validate in sections rather than all at once to avoid timeouts.
+1. **Reduce subtree depth:** Try `depth=3`, then `depth=2` for the failing subtree
+2. **Switch format:** Use `response_format="markdown"` (smaller than JSON)
+3. **Individual node queries:** Use `figma_get_node_details` for each frame within the subtree
+4. **Section-based validation:** For files with >100 nodes per subtree, split into smaller sections
+
+**Recovery order for each subtree:**
+```
+figma_get_file_structure(node_id=X, depth=5)   ← Try first
+  ↓ fails
+figma_get_file_structure(node_id=X, depth=3)   ← Reduce depth
+  ↓ fails
+figma_get_file_structure(node_id=X, depth=2, response_format="markdown")  ← Smaller format
+  ↓ fails
+figma_get_node_details for each child of X     ← Individual queries
+```
 
 ## Checkpoint Write
 
