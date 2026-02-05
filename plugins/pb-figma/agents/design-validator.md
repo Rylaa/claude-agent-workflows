@@ -75,6 +75,7 @@ For each node and its children, verify:
 - [ ] Vectors identified (if any)
 - [ ] Export settings checked
 - [ ] Duplicate-named icons classified (if multiple icons share same name)
+- [ ] **All assets marked Must-Use=YES** (prevents downstream library icon substitution)
 
 #### 3.1 Icon Name Detection
 
@@ -487,13 +488,16 @@ When gradient fills are detected in any node, include detailed gradient informat
 > **Note:** Text Auto-Resize, Text Decoration, and Letter Spacing are now captured in the **Text Node Properties** table above. This eliminates the need for downstream agents to re-query Figma for text-level details.
 
 ## Assets Inventory
-| Asset | Type | Node ID | Export Format | Position | Icon Type | Has Export Settings |
-|-------|------|---------|---------------|----------|-----------|---------------------|
-| logo | image | 1:234 | SVG | - | - | No |
-| hero-bg | image | 1:567 | PNG | - | - | No |
-| bar-chart | illustration | 6:34 | PNG | - | - | Yes |
-| card-icon-1 | icon | 1:890 | SVG | leading | THEMATIC | No |
-| card-check-1 | icon | 1:891 | SVG | trailing | STATUS_INDICATOR | No |
+
+> **CRITICAL:** Every asset listed here MUST be used as-is in the generated code. Code generators MUST NOT substitute downloaded assets with library icons (lucide-react, heroicons, etc.) even if a "similar" icon exists in the library. Library icons are ONLY acceptable as fallback when no downloaded asset exists.
+
+| Asset | Type | Node ID | Export Format | Position | Icon Type | Has Export Settings | Must-Use |
+|-------|------|---------|---------------|----------|-----------|---------------------|----------|
+| logo | image | 1:234 | SVG | - | - | No | YES |
+| hero-bg | image | 1:567 | PNG | - | - | No | YES |
+| bar-chart | illustration | 6:34 | PNG | - | - | Yes | YES |
+| card-icon-1 | icon | 1:890 | SVG | leading | THEMATIC | No | YES |
+| card-check-1 | icon | 1:891 | SVG | trailing | STATUS_INDICATOR | No | YES |
 
 ## Node Hierarchy
 ```
