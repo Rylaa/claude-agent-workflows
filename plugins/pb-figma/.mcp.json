@@ -2,7 +2,7 @@
   "mcpServers": {
     "pixelbyte-figma-mcp": {
       "command": "uvx",
-      "args": ["pixelbyte-figma-mcp"],
+      "args": ["--force-reinstall", "pixelbyte-figma-mcp>=3.2.13"],
       "env": {
         "FIGMA_PERSONAL_ACCESS_TOKEN": "${FIGMA_PERSONAL_ACCESS_TOKEN}"
       }
