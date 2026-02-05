@@ -31,7 +31,7 @@
 | Token Mapping | @skills/figma-to-code/references/token-mapping.md | code-generator-* |
 | Common Issues | @skills/figma-to-code/references/common-issues.md | code-generator-* |
 | Error Recovery | @skills/figma-to-code/references/error-recovery.md | all agents |
-| Pipeline Handoff | @skills/figma-to-code/references/pipeline-handoff.md | not yet referenced by any agent |
+| Pipeline Handoff | @skills/figma-to-code/references/pipeline-handoff.md | design-analyst, asset-manager, code-generator-*, compliance-checker |
 | Pipeline Config | @skills/figma-to-code/references/pipeline-config.md | not yet referenced by any agent |
 | Framework Detection | @skills/figma-to-code/references/framework-detection.md | code-generator-react, code-generator-swiftui, SKILL.md |
 

@@ -22,6 +22,7 @@ Load these references when needed:
 - Illustration detection: `illustration-detection.md` → Glob: `**/references/illustration-detection.md`
 - Asset node mapping: `asset-node-mapping.md` → Glob: `**/references/asset-node-mapping.md`
 - Error recovery: `error-recovery.md` → Glob: `**/references/error-recovery.md`
+- Pipeline handoff contract: `pipeline-handoff.md` → Glob: `**/references/pipeline-handoff.md`
 
 ## Data Source Priority
 

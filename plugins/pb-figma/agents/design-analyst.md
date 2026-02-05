@@ -31,6 +31,7 @@ Load these references when needed:
 - Layer order & hierarchy: `layer-order-hierarchy.md` → Glob: `**/references/layer-order-hierarchy.md`
 - Error recovery: `error-recovery.md` → Glob: `**/references/error-recovery.md`
 - Pipeline config: `pipeline-config.md` → Glob: `**/references/pipeline-config.md`
+- Pipeline handoff contract: `pipeline-handoff.md` → Glob: `**/references/pipeline-handoff.md`
 
 ## Data Source Priority
 

@@ -32,6 +32,7 @@ Load these references when needed:
 - Visual diff template: `visual-diff-template.md` → Glob: `**/references/visual-diff-template.md`
 - Preview setup: `preview-setup.md` → Glob: `**/references/preview-setup.md`
 - Error recovery: `error-recovery.md` → Glob: `**/references/error-recovery.md`
+- Pipeline handoff contract: `pipeline-handoff.md` → Glob: `**/references/pipeline-handoff.md`
 
 # Compliance Checker Agent
 

@@ -39,6 +39,7 @@ Load these references when needed:
 - Inline text variations: `inline-text-variations.md` → Glob: `**/references/inline-text-variations.md`
 - Error recovery: `error-recovery.md` → Glob: `**/references/error-recovery.md`
 - Framework detection: `framework-detection.md` → Glob: `**/references/framework-detection.md`
+- Pipeline handoff contract: `pipeline-handoff.md` → Glob: `**/references/pipeline-handoff.md`
 
 # React/Next.js Code Generator Agent
 
@@ -127,6 +128,18 @@ Append results to the spec file so compliance-checker can skip verified items:
 ```
 
 ---
+
+## Input Contract Validation (from pipeline-handoff.md)
+
+Before processing, verify the spec contains ALL required sections from Stage 3→4 handoff:
+- [ ] Downloaded Assets section exists
+- [ ] Asset Node Map section exists
+- [ ] Component Hierarchy section exists
+- [ ] Design Tokens section exists
+- [ ] Frame Properties section exists
+- [ ] Layer Order section exists
+
+If any required section is missing, warn user: "Spec missing required section: {section_name}. Asset Manager may not have completed."
 
 ## Asset Node Map
 
