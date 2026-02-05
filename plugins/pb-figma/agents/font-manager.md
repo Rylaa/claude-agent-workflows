@@ -1153,3 +1153,51 @@ Write this to `.qa/checkpoint-3.5-font-manager.json`. This allows the orchestrat
 - Parse actual metrics (fonts downloaded, warnings, etc.)
 - Track progress across workflow steps
 - Verify the task completed successfully
+
+## Background Process Completion Signal
+
+After writing the checkpoint file, signal completion to the orchestrator so downstream agents can detect when fonts are ready:
+
+```bash
+# Log completion to background processes log
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] font-manager: COMPLETE - $(cat .qa/checkpoint-3.5-font-manager.json | grep fonts_downloaded | grep -o '[0-9]*') fonts downloaded" >> .qa/background-processes.log
+
+# Create completion marker file for downstream agents
+touch .qa/fonts-ready
+```
+
+### Usage by Downstream Agents
+
+Downstream agents (like `component-builder` or `implementation-guide`) can check font availability:
+
+```bash
+# Check if fonts are ready
+if [ -f .qa/fonts-ready ]; then
+  echo "Fonts are available, proceeding with implementation..."
+  # Read font configuration from spec
+  SPEC_FILE="docs/figma-reports/${file_key}-spec.md"
+  # Extract font families and weights from "Fonts Setup" section
+else
+  echo "Fonts not ready yet, using system defaults..."
+  # Proceed with fallback fonts
+fi
+```
+
+Or check the background process log for status:
+
+```bash
+# Check background process completion
+if grep -q "font-manager: COMPLETE" .qa/background-processes.log 2>/dev/null; then
+  echo "Font manager completed successfully"
+else
+  echo "Font manager still running or not started"
+fi
+```
+
+### Benefits of Non-Blocking Signal Pattern
+
+1. **Parallel Execution**: Component builder can start while fonts download in background
+2. **Graceful Degradation**: If fonts aren't ready, components use system fallbacks
+3. **Progress Tracking**: Orchestrator can monitor background process via log file
+4. **Completion Detection**: `.qa/fonts-ready` file provides simple boolean check
+5. **No Race Conditions**: File-based signals are atomic and filesystem-synchronized
