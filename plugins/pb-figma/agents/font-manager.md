@@ -960,22 +960,32 @@ npm run dev
 
 ---
 
-## Output: Update Spec File
+## Output: Fonts Status File
 
-Modify the Implementation Spec at: `docs/figma-reports/{file_key}-spec.md`
+**⚠️ CRITICAL: Write to separate file to avoid race condition**
 
-### Add "Fonts Setup" Section
+The font-manager runs as a background process while other agents may be reading/writing the spec file. Writing to the same file creates a race condition that can corrupt data.
 
-Insert after "Design Tokens" section:
+**Output file:** `docs/figma-reports/{file_key}-fonts.md`
+
+This file will be referenced by the orchestrator and can be manually linked into the spec later if needed.
+
+### Fonts Status File Format
+
+Create a new markdown file with the following structure:
 
 ```markdown
-## Fonts Setup
+# Font Setup Status Report
 
+**File Key:** {file_key}
 **Status:** COMPLETE | PARTIAL | FAILED
 **Platform:** {detected_platform}
 **Generated:** {timestamp}
+**Duration:** {setup_duration}
 
-### Fonts Required
+---
+
+## Fonts Required
 
 | Font Family | Weights | Source | Status |
 |-------------|---------|--------|--------|
@@ -983,21 +993,141 @@ Insert after "Design Tokens" section:
 | Roboto | 400, 700 | Google Fonts | ✅ Downloaded |
 | SF Pro | 400, 600 | Not Found | ⚠️ Using fallback: Inter |
 
-### Files Created
+**Total Fonts:** {total_count}
+**Downloaded:** {success_count}
+**Failed:** {failed_count}
+**Success Rate:** {percentage}%
+
+---
+
+## Files Created
+
+### Font Files
+
+| File | Size | Purpose |
+|------|------|---------|
+| `public/fonts/Inter-Regular.woff2` | 42 KB | Inter 400 weight |
+| `public/fonts/Inter-Medium.woff2` | 43 KB | Inter 500 weight |
+| `public/fonts/Inter-SemiBold.woff2` | 44 KB | Inter 600 weight |
+| `public/fonts/Inter-Bold.woff2` | 45 KB | Inter 700 weight |
+
+**Total Size:** {total_size_kb} KB
+
+### Configuration Files
 
 | File | Purpose |
 |------|---------|
-| `public/fonts/Inter-Regular.woff2` | Inter 400 weight |
-| `public/fonts/Inter-Medium.woff2` | Inter 500 weight |
-| `public/fonts/Inter-SemiBold.woff2` | Inter 600 weight |
-| `public/fonts/Inter-Bold.woff2` | Inter 700 weight |
 | `src/styles/fonts.css` | @font-face definitions |
+| `src/styles/globals.css` | Updated with font imports |
 
-### Configuration Added
+---
 
-#### For React/Next.js:
+## Configuration Added
+
+### For React/Next.js
+
+#### fonts.css
+```css
+/* Generated font-face declarations */
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+```
+
+#### globals.css
 ```css
 /* Added to src/styles/globals.css */
+@import './fonts.css';
+
+:root {
+  --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-secondary: 'Roboto', system-ui, sans-serif;
+}
+```
+
+### For SwiftUI
+
+#### Info.plist
+```xml
+<!-- Added to Info.plist -->
+<key>UIAppFonts</key>
+<array>
+  <string>Fonts/Inter-Regular.ttf</string>
+  <string>Fonts/Inter-Medium.ttf</string>
+  <string>Fonts/Inter-SemiBold.ttf</string>
+  <string>Fonts/Inter-Bold.ttf</string>
+</array>
+```
+
+#### Font Extension (Optional)
+```swift
+// Created: Extensions/Font+Custom.swift
+extension Font {
+    static func inter(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        let fontName: String
+        switch weight {
+        case .regular: fontName = "Inter-Regular"
+        case .medium: fontName = "Inter-Medium"
+        case .semibold: fontName = "Inter-SemiBold"
+        case .bold: fontName = "Inter-Bold"
+        default: fontName = "Inter-Regular"
+        }
+        return .custom(fontName, size: size)
+    }
+}
+```
+
+### For Kotlin/Android
+
+#### Font Family XML
+```xml
+<!-- Created: res/font/inter.xml -->
+<?xml version="1.0" encoding="utf-8"?>
+<font-family xmlns:android="http://schemas.android.com/apk/res/android">
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="400"
+        android:font="@font/inter_regular" />
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="500"
+        android:font="@font/inter_medium" />
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="600"
+        android:font="@font/inter_semibold" />
+    <font
+        android:fontStyle="normal"
+        android:fontWeight="700"
+        android:font="@font/inter_bold" />
+</font-family>
+```
+
+#### Font Files
+```
+Created: res/font/inter_regular.ttf
+Created: res/font/inter_medium.ttf
+Created: res/font/inter_semibold.ttf
+Created: res/font/inter_bold.ttf
+```
+
+### For Vue/Nuxt
+
+#### main.css
+```css
+/* Added to assets/css/main.css */
 @import './fonts.css';
 
 :root {
@@ -1005,56 +1135,156 @@ Insert after "Design Tokens" section:
 }
 ```
 
-#### For SwiftUI:
-```xml
-<!-- Added to Info.plist -->
-<key>UIAppFonts</key>
-<array>
-  <string>Fonts/Inter-Regular.ttf</string>
-  ...
-</array>
+#### nuxt.config.ts
+```typescript
+// Updated nuxt.config.ts
+export default defineNuxtConfig({
+  css: ['~/assets/css/main.css'],
+})
 ```
 
-#### For Kotlin/Android:
-```
-Created: res/font/inter.xml
-Created: res/font/inter_regular.ttf, inter_medium.ttf, ...
-```
+---
 
-### Usage Examples
+## Usage Examples
 
-#### React/Next.js
+### React/Next.js
+
+#### With Tailwind
 ```tsx
-<h1 className="font-['Inter'] font-semibold">Title</h1>
-// or with CSS variable
+<h1 className="font-['Inter'] font-semibold text-2xl">Title</h1>
+<p className="font-['Roboto'] font-normal">Body text</p>
+```
+
+#### With CSS Variables
+```tsx
 <h1 style={{ fontFamily: 'var(--font-primary)' }}>Title</h1>
 ```
 
-#### SwiftUI
+#### With Inline Style
+```tsx
+<h1 style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>Title</h1>
+```
+
+### SwiftUI
+
+#### Direct Usage
 ```swift
 Text("Title")
     .font(.custom("Inter-SemiBold", size: 24))
-// or with extension
+```
+
+#### With Extension (if created)
+```swift
 Text("Title")
     .font(.inter(24, weight: .semibold))
 ```
 
-#### Kotlin/Android
+### Kotlin/Android Compose
+
+#### Using Font Family
 ```kotlin
 Text(
     text = "Title",
     fontFamily = InterFontFamily,
-    fontWeight = FontWeight.SemiBold
+    fontWeight = FontWeight.SemiBold,
+    fontSize = 24.sp
 )
 ```
 
-### Warnings
+#### Using Typography Theme
+```kotlin
+// In Theme.kt
+val Typography = Typography(
+    headlineLarge = TextStyle(
+        fontFamily = InterFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 32.sp
+    )
+)
+```
 
-- {any warnings or notes}
+### Vue/Nuxt
 
-### Manual Steps Required
+#### Template
+```vue
+<template>
+  <h1 class="font-inter font-semibold">Title</h1>
+</template>
 
-- [ ] {any manual steps the user needs to complete}
+<style scoped>
+.font-inter {
+  font-family: var(--font-primary);
+}
+</style>
+```
+
+---
+
+## Font Licenses
+
+| Font | License | Attribution Required |
+|------|---------|---------------------|
+| Inter | SIL Open Font License 1.1 | No |
+| Roboto | Apache License 2.0 | No |
+
+**License Files Created:**
+- `public/fonts/OFL.txt` (Inter license)
+- `public/fonts/LICENSE.txt` (Roboto license)
+
+---
+
+## Warnings
+
+{List any warnings, issues, or important notes here}
+
+Example:
+- ⚠️ SF Pro font not available publicly. Using Inter as fallback.
+- ⚠️ Font weights 300 and 800 not used in design, skipped download.
+- ⚠️ Large font files detected. Consider subsetting for production.
+
+---
+
+## Manual Steps Required
+
+{List any steps the developer needs to complete manually}
+
+Example:
+- [ ] Verify font files load correctly in DevTools > Network tab
+- [ ] Test font rendering across different browsers
+- [ ] Consider font subsetting for production to reduce file size
+- [ ] Update CSS purge configuration to preserve font-family classes
+- [ ] Add font preload links in HTML head for critical fonts
+
+---
+
+## Verification Commands
+
+### Check Files Exist
+```bash
+# Check font files
+ls -lh public/fonts/
+
+# Check configuration
+cat src/styles/fonts.css
+```
+
+### Test in Browser
+```bash
+# Start dev server
+npm run dev
+
+# Open DevTools > Network > Font
+# Verify all fonts load successfully
+```
+
+### Build Test
+```bash
+# Test production build includes fonts
+npm run build
+
+# Check font files in dist/public/fonts/
+ls -lh dist/public/fonts/
+```
 ```
 
 ---
