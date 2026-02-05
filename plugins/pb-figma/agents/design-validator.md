@@ -146,17 +146,20 @@ For each container, extract via `figma_get_node_details`:
 
 **Frame Properties Table in Validation Report:**
 
-> **IMPORTANT:** Include `absoluteBoundingBox.x` and `absoluteBoundingBox.y` for ALL frames in the Frame Properties table. Downstream agents use these coordinates for layer-order z-index calculation without needing to re-query Figma.
+> **IMPORTANT:** Include `absoluteBoundingBox.x`, `absoluteBoundingBox.y`, AND **`childIndex`** for ALL frames. Downstream agents use coordinates for z-index calculation and **childIndex for rendering order**.
 
-| Node ID | Node Name | Width | Height | X | Y | Corner Radius | Border |
-|---------|-----------|-------|--------|---|---|---------------|--------|
-| 3:217 | OnboardingCard | 393 | 568 | 0 | 0 | 24px (uniform) | none |
-| 3:230 | ChecklistItem | 361 | 80 | 16 | 120 | 12px (uniform) | 1px #FFFFFF40 inside |
-| 3:306 | GrowthSection | 361 | 180 | 16 | 388 | 16px (TL/TR), 0 (BL/BR) | none |
+> **CRITICAL:** Code generators MUST render children in `childIndex` order (Figma children array order), NOT sorted by Y coordinate. Y coordinate determines visual position, NOT rendering order. See `layer-order-hierarchy.md`.
+
+| Node ID | Node Name | Width | Height | X | Y | Child Index | Corner Radius | Border |
+|---------|-----------|-------|--------|---|---|-------------|---------------|--------|
+| 3:217 | OnboardingCard | 393 | 568 | 0 | 0 | 0 | 24px (uniform) | none |
+| 3:230 | ChecklistItem | 361 | 80 | 16 | 120 | 1 | 12px (uniform) | 1px #FFFFFF40 inside |
+| 3:306 | GrowthSection | 361 | 180 | 16 | 388 | 2 | 16px (TL/TR), 0 (BL/BR) | none |
 
 **Formats:**
 - Corner radius -- uniform: `16px (uniform)` | per-corner: `16px (TL/TR), 8px (BL/BR)` or `TL:16 TR:16 BL:8 BR:8`
 - Border: `{width}px {color}{opacity} {align}` (e.g., `1px #FFFFFF40 inside`) or `none`
+- Child Index: 0-based index from Figma children array (0 = first child, rendered first in Auto Layout)
 
 ### 5. Fill Opacity Extraction
 
@@ -373,6 +376,28 @@ if (layoutMode !== "NONE") {
 4. Include constraints to inform responsive behavior
 5. Min/Max dimensions inform tablet adaptive patterns
 
+### 10b. Children Array Order (for Auto Layout containers)
+
+**CRITICAL:** For every frame with Auto Layout (`layoutMode` ≠ "NONE"), document the children array order explicitly. This is the **authoritative rendering order** for vertical and horizontal layouts.
+
+**Extraction:** When querying a frame via `figma_get_node_details`, the `children` array is already in Figma's rendering order. Record the array index for each child.
+
+```markdown
+### Children Array Order
+
+| Parent ID | Parent Name | Layout | Child Index | Child Name | Child ID |
+|-----------|-------------|--------|-------------|------------|----------|
+| 3:100 | ContentArea | VERTICAL | 0 | HeaderSection | 3:101 |
+| 3:100 | ContentArea | VERTICAL | 1 | CardList | 3:102 |
+| 3:100 | ContentArea | VERTICAL | 2 | FooterSection | 3:103 |
+```
+
+**Rules:**
+1. Children array order = rendering order for Auto Layout (top-to-bottom for VERTICAL, left-to-right for HORIZONTAL)
+2. NEVER sort by Y or X coordinate to determine order — use array index only
+3. Include this table for EVERY Auto Layout container in the design
+4. If children are re-ordered in Figma, the array index reflects the new order
+
 ## Status Determination
 
 - **FAIL**: File structure retrieval fails, `file_key` is invalid/inaccessible, critical node data cannot be fetched, or more than 5 unresolved items remain
@@ -459,6 +484,12 @@ For each TEXT node, capture per-node text properties:
 | Node ID | Node Name | Layout Mode | Primary Axis | Counter Axis | Padding (T/R/B/L) | Spacing | Constraints (H/V) | Min/Max Width |
 |---------|-----------|-------------|-------------|--------------|-------------------|---------|-------------------|---------------|
 | {id} | {name} | {mode} | {primary} | {counter} | {padding} | {spacing} | {constraints} | {minmax} |
+
+### Children Array Order
+
+| Parent ID | Parent Name | Layout | Child Index | Child Name | Child ID |
+|-----------|-------------|--------|-------------|------------|----------|
+| {parent_id} | {parent_name} | {layout} | {index} | {child_name} | {child_id} |
 
 ### Spacing
 | Token | Value |
