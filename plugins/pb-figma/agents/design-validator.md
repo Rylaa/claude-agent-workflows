@@ -267,7 +267,9 @@ saturation = (max(R,G,B) - min(R,G,B)) / 255
 
 **Problem:** A single TEXT node may have multiple character styles (different colors, weights, or decorations for different words). The REST API exposes this via `characterStyleOverrides` and `styleOverrideTable`.
 
-**Detection Pattern:**
+**When to check:** For EVERY TEXT node encountered during validation, query `characterStyleOverrides`. This is lightweight (data is already in the node details response).
+
+**Detection and Range Extraction Pattern:**
 
 ```typescript
 const nodeDetails = figma_get_node_details({
@@ -275,42 +277,68 @@ const nodeDetails = figma_get_node_details({
   node_id: "{text_node_id}"
 });
 
-// Check for character-level style overrides
 const overrides = nodeDetails.characterStyleOverrides;
 if (overrides && overrides.length > 0 && overrides.some(v => v !== 0)) {
-  // Text has inline style variations
-  // Count unique non-zero override indices
-  const uniqueStyles = [...new Set(overrides.filter(v => v !== 0))];
-
-  // Extract style details from styleOverrideTable
+  const text = nodeDetails.characters;
   const styleTable = nodeDetails.styleOverrideTable || {};
-  const styleDetails = uniqueStyles.map(idx => {
-    const style = styleTable[idx];
-    if (!style || Object.keys(style).length === 0) {
-      return `${idx}: (default style — known API bug)`;
+
+  // Step 1: Group consecutive override indices into ranges
+  const ranges = [];
+  let start = 0;
+  let currentIdx = overrides[0];
+  for (let i = 1; i <= overrides.length; i++) {
+    if (i === overrides.length || overrides[i] !== currentIdx) {
+      ranges.push({ start, end: i, overrideIndex: currentIdx });
+      start = i;
+      currentIdx = overrides[i];
     }
-    const fills = style.fills?.map(f => {
-      const hex = rgbToHex(f.color.r, f.color.g, f.color.b);
-      return hex;
-    }).join(', ') || 'inherited';
-    const decoration = style.textDecoration || 'NONE';
-    return `${idx}: fills: ${fills}, decoration: ${decoration}`;
-    // ↑ See references/text-decoration.md for decoration value mapping (load via Glob)
+  }
+
+  // Step 2: Extract text segment and style for each range
+  const variations = ranges.map(({ start, end, overrideIndex }) => {
+    const segment = text.substring(start, end);
+    const style = styleTable[overrideIndex];
+
+    // Step 3: Handle empty override objects (Figma API bug)
+    // When styleOverrideTable returns {}, use node's base style
+    let color, weight, decoration;
+    if (!style || Object.keys(style).length === 0) {
+      // Use node's base style as fallback
+      const baseFill = nodeDetails.fills?.[0];
+      color = baseFill ? rgbToHex(baseFill.color.r, baseFill.color.g, baseFill.color.b) : 'inherited';
+      weight = nodeDetails.fontWeight || 'inherited';
+      decoration = nodeDetails.textDecoration || 'NONE';
+    } else {
+      const fill = style.fills?.[0];
+      color = fill ? rgbToHex(fill.color.r, fill.color.g, fill.color.b) : 'inherited';
+      weight = style.fontWeight || nodeDetails.fontWeight || 'inherited';
+      decoration = style.textDecoration || 'NONE';
+    }
+
+    return {
+      range: `${start}-${end}`,
+      text: segment,
+      color,
+      weight,
+      decoration
+    };
   });
 
-  // Flag for design-analyst
-  return {
-    nodeId: text_node_id,
-    text: nodeDetails.characters,
-    overrideCount: overrides.filter(v => v !== 0).length,
-    uniqueStyles: styleDetails
-  };
+  // Output: Complete variation table for downstream agents
+  return { nodeId: text_node_id, fullText: text, variations };
 }
 ```
 
-**When to check:** For EVERY TEXT node encountered during validation, query `characterStyleOverrides`. This is lightweight (data is already in the node details response).
+> **Reference:** `text-decoration.md` for decoration value mapping (load via Glob: `**/references/text-decoration.md`)
 
-**Known Figma API Bug:** `styleOverrideTable` may return empty objects `{}` for default-value overrides. Document these as `(default style)` — the design-analyst will use the node's base style for those characters.
+**Known Figma API Bug:** `styleOverrideTable` may return empty objects `{}` for default-value overrides. The algorithm above handles this by falling back to the node's base style (fills, fontWeight, textDecoration).
+
+**Output Example:**
+```
+Node 3:260: "Let's fix your Hook"
+→ Range 0-15: "Let's fix your " | #FFFFFF | 600 | NONE
+→ Range 15-19: "Hook"           | #F2F20D | 600 | UNDERLINE
+```
 
 ### 10. Auto Layout Property Extraction
 
@@ -480,13 +508,16 @@ For each TEXT node, capture per-node text properties:
 | 3:245 | "Click here" | UNDERLINE | HEIGHT | 600 | -0.02em | 200×32 | None |
 | 3:250 | "Price" | NONE | NONE | 400 | 0 | 150×24 | 1 style |
 
-### Inline Text Variations Detected
+### Inline Text Variations
 
-| Node ID | Text Content | Override Count | Unique Styles |
-|---------|-------------|----------------|---------------|
-| {id}    | "{text}"    | {count} chars  | {style_details} |
+| Node ID | Full Text | Range | Segment | Color | Weight | Decoration |
+|---------|-----------|-------|---------|-------|--------|------------|
+| 3:260 | "Let's fix your Hook" | 0-15 | "Let's fix your " | #FFFFFF | 600 | NONE |
+| 3:260 | "Let's fix your Hook" | 15-19 | "Hook" | #F2F20D | 600 | UNDERLINE |
 
-> **Note:** Empty style objects `{}` in styleOverrideTable indicate default-value overrides (known Figma API behavior). These characters use the node's base text style.
+> **Note:** When `styleOverrideTable` returns empty `{}` for an override index, the node's base style (fills, fontWeight, textDecoration) is used as fallback. These rows show the resolved base style values.
+>
+> **CRITICAL:** Code generators MUST use this table to generate multi-styled text (Text concatenation with + in SwiftUI, styled spans in React). Do NOT generate a single Text element when variations exist.
 
 ### Auto Layout Properties
 
