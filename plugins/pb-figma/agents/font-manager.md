@@ -1094,3 +1094,32 @@ Before completing, verify:
 - [ ] Spec file updated with "Fonts Setup" section
 - [ ] Warnings documented for missing fonts
 - [ ] Manual steps clearly listed
+
+## Checkpoint Write
+
+After completing all font setup steps, create a checkpoint file so the orchestrator can track completion:
+
+```bash
+mkdir -p .qa
+```
+
+```json
+{
+  "checkpoint": "3.5-font-manager",
+  "status": "complete",
+  "fonts_downloaded": 8,
+  "fonts_unavailable": 2,
+  "config_files_created": 3,
+  "spec_updated": true,
+  "warnings_count": 2,
+  "manual_steps_count": 1
+}
+```
+
+**Important:** All numeric fields (`fonts_downloaded`, `fonts_unavailable`, `config_files_created`, `warnings_count`, `manual_steps_count`) must be actual integer values, not strings or placeholders.
+
+Write this to `.qa/checkpoint-3.5-font-manager.json`. This allows the orchestrator to:
+- Detect when the background process completes
+- Parse actual metrics (fonts downloaded, warnings, etc.)
+- Track progress across workflow steps
+- Verify the task completed successfully
