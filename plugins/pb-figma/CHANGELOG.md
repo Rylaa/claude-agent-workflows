@@ -2,6 +2,11 @@
 
 All notable changes to the pb-figma plugin will be documented in this file.
 
+## [1.18.1] - 2026-02-08
+
+### Fixed
+- **MCP Token Resolution** - Added `FIGMA_ACCESS_TOKEN` and `FIGMA_TOKEN` env aliases to `.mcp.json` to fix token not found error. The Python MCP server looks for these variable names but config only passed `FIGMA_PERSONAL_ACCESS_TOKEN`.
+
 ## [1.18.0] - 2026-02-06
 
 ### Changed
