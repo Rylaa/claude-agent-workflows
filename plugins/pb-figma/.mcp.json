@@ -4,7 +4,9 @@
       "command": "uvx",
       "args": ["--force-reinstall", "pixelbyte-figma-mcp>=3.2.15,<4.0.0"],
       "env": {
-        "FIGMA_PERSONAL_ACCESS_TOKEN": "${FIGMA_PERSONAL_ACCESS_TOKEN}"
+        "FIGMA_PERSONAL_ACCESS_TOKEN": "${FIGMA_PERSONAL_ACCESS_TOKEN}",
+        "FIGMA_ACCESS_TOKEN": "${FIGMA_PERSONAL_ACCESS_TOKEN}",
+        "FIGMA_TOKEN": "${FIGMA_PERSONAL_ACCESS_TOKEN}"
       }
     }
   }
