@@ -187,7 +187,7 @@ def _strip_version_footer(response: str) -> str:
 # Initialize MCP Server
 # ============================================================================
 
-SERVER_VERSION = "3.3.0"
+SERVER_VERSION = "3.3.1"
 
 mcp = FastMCP("figma_mcp")
 

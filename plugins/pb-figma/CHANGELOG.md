@@ -13,7 +13,7 @@ All notable changes to the pb-figma plugin will be documented in this file.
 - **Component Scoring** - Granular 0-100% scoring per component (structure, tokens, assets, a11y, responsive, visual)
 
 ### Changed
-- **MCP Server** - Updated to pixelbyte-figma-mcp==3.3.0 (deterministic pipeline, enhanced generators)
+- **MCP Server** - Updated to pixelbyte-figma-mcp==3.3.1 (deterministic pipeline, enhanced generators)
 - **Code Generator Base** - Shared input processing, spec validation, and error handling patterns
 - **Code Generator React** - Enhanced with pipeline integration, component subset mode for parallel fan-out
 - **Code Generator SwiftUI** - Updated with component subset mode and iOS 15.0+ gradient text support
