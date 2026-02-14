@@ -67,7 +67,7 @@ Use `TodoWrite` to track progress:
 1. **Read Implementation Spec** - Load and parse the spec file
 2. **Verify Spec Status** - Check ready state
 3. **Detect Framework** - (Framework-specific logic)
-4. **Confirm with User** - Validate detection
+4. **Confirm with User (If Ambiguous)** - Validate detection only when multiple frameworks are detected or confidence is low
 5. **Generate Component Code** - Use MCP + framework-specific enhancement
 6. **Write Component Files** - Framework-specific directory structure
 7. **Update Spec with Results** - Add Generated Code table

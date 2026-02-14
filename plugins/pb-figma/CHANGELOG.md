@@ -2,6 +2,27 @@
 
 All notable changes to the pb-figma plugin will be documented in this file.
 
+## [1.19.0] - 2026-02-15
+
+### Added
+- **Deterministic Pipeline** - New `figma_run_pipeline` MCP tool for end-to-end design-to-code automation with stage-level caching, normalized output, and visual validation
+- **Pipeline Stages** - Component DAG builder, snapshot fetcher, IR normalizer, React generator, asset materializer, static gates, visual gates, report packager
+- **Compliance Pre-Check Agent** - Lightweight haiku-based agent for fast static compliance checks before full compliance validation (cost/time savings)
+- **Visual Validation** - Playwright-based rendering and screenshot comparison with hybrid/pixel/vision modes
+- **Gate Orchestration** - Accessibility, responsive, and visual gates with fail-fast capability and configurable thresholds
+- **Component Scoring** - Granular 0-100% scoring per component (structure, tokens, assets, a11y, responsive, visual)
+
+### Changed
+- **MCP Server** - Updated to pixelbyte-figma-mcp==3.3.0 (deterministic pipeline, enhanced generators)
+- **Code Generator Base** - Shared input processing, spec validation, and error handling patterns
+- **Code Generator React** - Enhanced with pipeline integration, component subset mode for parallel fan-out
+- **Code Generator SwiftUI** - Updated with component subset mode and iOS 15.0+ gradient text support
+- **Compliance Checker** - v2.0 with fail-fast gate orchestration, parallel static checks (44% faster), incremental checkpoints
+- **Docs Index** - Comprehensive documentation index with 40+ reference documents cataloged
+
+### Fixed
+- **Generator Consistency** - Child limits now imported from base.py, not redefined per generator
+
 ## [1.18.1] - 2026-02-08
 
 ### Fixed

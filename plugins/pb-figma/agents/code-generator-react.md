@@ -8,6 +8,7 @@ tools:
   - Grep
   - Bash
   - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_generate_code
+  - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_run_pipeline
   - mcp__plugin_pb-figma_pixelbyte-figma-mcp__figma_add_code_connect_map
   - TodoWrite
   - AskUserQuestion
@@ -62,7 +63,7 @@ Use `TodoWrite` to track code generation progress through these steps:
 3. **Build Asset Node Map** - Extract Asset Children from all components
 4. **Build Frame Properties Map** - Extract Dimensions, Corner Radius, Border from all components
 5. **Detect React/Next.js Framework** - Identify React variant and Tailwind version
-6. **Confirm Framework with User** - Validate detection with user
+6. **Confirm Framework with User (If Ambiguous)** - Ask only when multiple framework signals conflict
 7. **Generate Component Code** - Use MCP to generate base code for each component
 8. **Enhance with React Specifics** - Add types, tokens, gradients, accessibility
 9. **Write Component Files** - Save to React project structure
@@ -262,6 +263,22 @@ import ClockIcon from '@/assets/icons/clock.svg';
 | SVG component | Custom icons needing color control |
 | img tag | Simple icons without color control |
 
+## Deterministic Pipeline Feature Flag
+
+When `FIGMA_PIPELINE_V2_ENABLED=true`, prefer deterministic pipeline for React/Tailwind:
+
+```yaml
+figma_run_pipeline:
+  - file_key: {file_key}
+  - node_id: {node_id}
+  - framework: react_tailwind
+  - mode: strict_pixel
+  - use_cache: true
+  - target_match: 0.95
+```
+
+Then consume `asset_manifest` from run artifacts instead of signed Figma URLs.
+
 ## Frame Properties Mapping
 
 > **Reference:** Load `frame-properties.md` via `Glob("**/references/frame-properties.md")` for dimension extraction, corner radius (uniform/per-corner), border/stroke handling, and Tailwind mapping rules.
@@ -301,10 +318,15 @@ Determine variant:
 ls tailwind.config.* 2>/dev/null || cat package.json 2>/dev/null | grep tailwindcss
 ```
 
-### Confirm with User
+### Confirm with User (Only if Ambiguous)
 
-Use `AskUserQuestion`:
+If detection confidence is high (single clear framework signal), proceed without user prompt.
 
+Use `AskUserQuestion` only when:
+- Multiple framework indicators conflict (e.g., both Next.js and Vue present)
+- Tailwind detection is uncertain in a mixed monorepo
+
+Prompt template:
 ```
 Detected: {React/Next.js} + {Tailwind: yes/no}
 

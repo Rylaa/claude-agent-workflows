@@ -23,3 +23,11 @@ __pycache__/
 docs
 docs
 packages/pixelbyte-figma-mcp.OLD/
+
+# QA artifacts (benchmarks, cache, test runs)
+.qa/
+**/.qa/
+
+# Build artifacts
+dist/
+**/dist/

@@ -18,7 +18,8 @@
 | code-generator-swiftui | @agents/code-generator-swiftui.md | Generate SwiftUI code | ✅ Active |
 | code-generator-vue | @agents/code-generator-vue.md | Generate Vue 3 code | 🚧 Placeholder |
 | code-generator-kotlin | @agents/code-generator-kotlin.md | Generate Kotlin Compose code | 🚧 Placeholder |
-| compliance-checker | @agents/compliance-checker.md | Validate spec compliance | ✅ Active |
+| compliance-pre-check | @agents/compliance-pre-check.md | Static checks + Gate 1 on haiku | ✅ Active |
+| compliance-checker | @agents/compliance-checker.md | Gate 2+3 visual validation | ✅ Active |
 | font-manager | @agents/font-manager.md | Download and configure fonts | ✅ Active |
 
 > **Note:** Vue and Kotlin generators are planned for future releases. Use React or SwiftUI generators for now.
@@ -32,7 +33,7 @@
 | Common Issues | @skills/figma-to-code/references/common-issues.md | code-generator-* |
 | Error Recovery | @skills/figma-to-code/references/error-recovery.md | all agents |
 | Pipeline Handoff | @skills/figma-to-code/references/pipeline-handoff.md | design-analyst, asset-manager, code-generator-*, compliance-checker |
-| Pipeline Config | @skills/figma-to-code/references/pipeline-config.md | not yet referenced by any agent |
+| Pipeline Config | @skills/figma-to-code/references/pipeline-config.md | compliance-pre-check, compliance-checker |
 | Framework Detection | @skills/figma-to-code/references/framework-detection.md | code-generator-react, code-generator-swiftui, SKILL.md |
 
 ### Validation References

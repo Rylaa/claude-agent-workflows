@@ -1,5 +1,16 @@
 """Tests for code generator fixes."""
-from generators.base import MAX_CHILDREN_LIMIT, MAX_NATIVE_CHILDREN_LIMIT, parse_fills, ColorValue, GradientStop, GradientDef, ICON_NAME_MAP
+import importlib
+import os
+from generators.base import (
+    MAX_CHILDREN_LIMIT,
+    MAX_NATIVE_CHILDREN_LIMIT,
+    parse_fills,
+    ColorValue,
+    GradientStop,
+    GradientDef,
+    ICON_NAME_MAP,
+    _get_single_fill_css,
+)
 from generators.react_generator import generate_react_code
 from generators.css_generator import generate_css_code
 import math
@@ -238,3 +249,187 @@ class TestHardcodedPi:
         with open('generators/base.py', 'r') as f:
             source = f.read()
         assert '3.14159265359' not in source, "Should use math.pi instead of hardcoded value"
+
+
+class TestTokenGenerationWiring:
+    """Verify figma_mcp token generation uses correct variables."""
+
+    def test_tailwind_config_uses_spacing_list(self):
+        with open('figma_mcp.py', 'r') as f:
+            source = f.read()
+
+        assert "_generate_tailwind_config(colors_list, typography_list, spacing_list)" in source, (
+            "figma_get_design_tokens should pass spacing_list to _generate_tailwind_config"
+        )
+
+
+class TestReactAssetAndVectorOutput:
+    """Verify React generator emits concrete image/svg output when data exists."""
+
+    def test_react_root_uses_component_classname_prop(self):
+        node = {
+            'type': 'RECTANGLE',
+            'name': 'RootCard',
+            'absoluteBoundingBox': {'x': 0, 'y': 0, 'width': 320, 'height': 180},
+            'fills': [{'type': 'SOLID', 'visible': True, 'color': {'r': 1, 'g': 1, 'b': 1, 'a': 1}}],
+            'strokes': [],
+            'effects': [],
+            'children': [],
+        }
+        code = generate_react_code(node, 'RootCardComp', use_tailwind=True)
+        assert "className={`${className} " in code or "className={className}" in code
+
+    def test_react_uses_image_url_when_available(self):
+        node = {
+            'type': 'RECTANGLE',
+            'name': 'HeroImage',
+            'absoluteBoundingBox': {'x': 0, 'y': 0, 'width': 200, 'height': 120},
+            'fills': [
+                {
+                    'type': 'IMAGE',
+                    'visible': True,
+                    'imageRef': 'abc123',
+                    'imageUrl': 'https://example.com/hero.png',
+                    'scaleMode': 'FILL'
+                }
+            ],
+            'strokes': [],
+            'effects': [],
+            'children': [],
+        }
+        code = generate_react_code(node, 'HeroImageCard', use_tailwind=True)
+        assert "https://example.com/hero.png" in code
+        assert "imageRef: abc123" not in code
+        assert "background: 'url('https://example.com/hero.png'" not in code
+
+    def test_react_vector_geometry_generates_inline_svg(self):
+        node = {
+            'type': 'VECTOR',
+            'name': 'ArrowIcon',
+            'absoluteBoundingBox': {'x': 0, 'y': 0, 'width': 16, 'height': 16},
+            'fills': [{'type': 'SOLID', 'visible': True, 'color': {'r': 1, 'g': 0, 'b': 0, 'a': 1}}],
+            'strokes': [],
+            'effects': [],
+            'fillGeometry': [{'path': 'M1 1L15 8L1 15Z'}],
+            'children': [],
+        }
+        code = generate_react_code(node, 'ArrowIconComp', use_tailwind=True)
+        assert '<svg' in code
+        assert '<path d=\"M1 1L15 8L1 15Z\"' in code
+        assert '/* Icon: ArrowIcon */' in code
+
+    def test_react_absolute_child_gets_relative_parent_and_offsets(self):
+        node = {
+            'type': 'FRAME',
+            'name': 'Root',
+            'layoutMode': 'VERTICAL',
+            'clipsContent': True,
+            'absoluteBoundingBox': {'x': 100, 'y': 200, 'width': 400, 'height': 200},
+            'fills': [],
+            'strokes': [],
+            'effects': [],
+            'children': [
+                {
+                    'type': 'RECTANGLE',
+                    'name': 'Abs',
+                    'layoutPositioning': 'ABSOLUTE',
+                    'absoluteBoundingBox': {'x': 150.5, 'y': 180.25, 'width': 100, 'height': 100},
+                    'fills': [],
+                    'strokes': [],
+                    'effects': [],
+                    'children': [],
+                }
+            ],
+        }
+        code = generate_react_code(node, 'AbsOffsets', use_tailwind=True)
+        assert 'relative' in code
+        assert 'overflow-hidden' in code
+        assert 'left-[50.5px]' in code
+        assert 'top-[-19.75px]' in code
+
+    def test_react_skips_invisible_nodes(self):
+        node = {
+            'type': 'FRAME',
+            'name': 'Root',
+            'layoutMode': 'VERTICAL',
+            'absoluteBoundingBox': {'x': 0, 'y': 0, 'width': 300, 'height': 100},
+            'fills': [],
+            'strokes': [],
+            'effects': [],
+            'children': [
+                {
+                    'type': 'TEXT',
+                    'name': 'HiddenLabel',
+                    'visible': False,
+                    'characters': 'DO_NOT_RENDER',
+                    'style': {'fontSize': 16, 'fontWeight': 400},
+                    'fills': [{'type': 'SOLID', 'visible': True, 'color': {'r': 1, 'g': 1, 'b': 1, 'a': 1}}],
+                    'strokes': [],
+                    'effects': [],
+                    'absoluteBoundingBox': {'x': 0, 'y': 0, 'width': 120, 'height': 20},
+                    'children': [],
+                },
+                {
+                    'type': 'TEXT',
+                    'name': 'VisibleLabel',
+                    'visible': True,
+                    'characters': 'RENDER_OK',
+                    'style': {'fontSize': 16, 'fontWeight': 400},
+                    'fills': [{'type': 'SOLID', 'visible': True, 'color': {'r': 1, 'g': 1, 'b': 1, 'a': 1}}],
+                    'strokes': [],
+                    'effects': [],
+                    'absoluteBoundingBox': {'x': 0, 'y': 20, 'width': 120, 'height': 20},
+                    'children': [],
+                },
+            ],
+        }
+        code = generate_react_code(node, 'VisibleOnly', use_tailwind=True)
+        assert 'DO_NOT_RENDER' not in code
+        assert 'RENDER_OK' in code
+
+
+class TestBackgroundFillMapping:
+    """Verify image fill scale mode mapping for CSS background."""
+
+    def test_image_fill_stretch_maps_to_100_percent(self):
+        css_value = _get_single_fill_css(
+            {
+                'type': 'IMAGE',
+                'visible': True,
+                'scaleMode': 'STRETCH',
+                'imageUrl': '/assets/figma/icon.png',
+            }
+        )
+        assert css_value == 'url("/assets/figma/icon.png") center/100% 100% no-repeat'
+
+
+class TestChildLimitEnvOverrides:
+    """Verify codegen child limits can be configured via env vars."""
+
+    def test_env_override_for_child_limits(self):
+        prev_web = os.environ.get("FIGMA_CODEGEN_MAX_CHILDREN")
+        prev_native = os.environ.get("FIGMA_CODEGEN_MAX_NATIVE_CHILDREN")
+
+        try:
+            os.environ["FIGMA_CODEGEN_MAX_CHILDREN"] = "77"
+            os.environ["FIGMA_CODEGEN_MAX_NATIVE_CHILDREN"] = "55"
+
+            base = importlib.import_module("generators.base")
+            reloaded = importlib.reload(base)
+
+            assert reloaded.MAX_CHILDREN_LIMIT == 77
+            assert reloaded.MAX_NATIVE_CHILDREN_LIMIT == 55
+        finally:
+            if prev_web is None:
+                os.environ.pop("FIGMA_CODEGEN_MAX_CHILDREN", None)
+            else:
+                os.environ["FIGMA_CODEGEN_MAX_CHILDREN"] = prev_web
+
+            if prev_native is None:
+                os.environ.pop("FIGMA_CODEGEN_MAX_NATIVE_CHILDREN", None)
+            else:
+                os.environ["FIGMA_CODEGEN_MAX_NATIVE_CHILDREN"] = prev_native
+
+            # Restore module state for other tests
+            base = importlib.import_module("generators.base")
+            importlib.reload(base)

@@ -38,6 +38,9 @@ from generators.base import (
     MAX_CHILDREN_LIMIT,
     MAX_NATIVE_CHILDREN_LIMIT,
 )
+from pipeline.runner import PipelineConfig, PipelineDependencies, PipelineRunner
+from pipeline.models import PipelineMode, PipelineRunRequest, PipelineRunResult
+from pipeline.render_implementation import render_react_implementation_screenshot
 
 
 # ============================================================================
@@ -86,6 +89,17 @@ DEFAULT_TIMEOUT = 30.0
 # Retry configuration for network errors
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 1.0  # Base delay in seconds (exponential backoff)
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+PIPELINE_V2_DEFAULT_ENABLED = False
+PIPELINE_V2_DEFAULT_SCOPE = "react"
+PIPELINE_V2_DEFAULT_CACHE_ENABLED = True
+PIPELINE_V2_DEFAULT_VISUAL_MODE = "hybrid"
+PIPELINE_V2_DEFAULT_STRICT_PIXEL = True
+PIPELINE_V2_DEFAULT_TARGET_MATCH = 0.95
+PIPELINE_V2_DEFAULT_MAX_VISUAL_ITER = 3
+PIPELINE_V2_DEFAULT_PASS_THRESHOLD = 95.0
+PIPELINE_V2_DEFAULT_WARN_THRESHOLD = 85.0
+PIPELINE_V2_DEFAULT_AUTO_RENDER = True
 
 # Tailwind CSS font weight mapping
 TAILWIND_WEIGHT_MAP = {
@@ -135,11 +149,45 @@ TAILWIND_ALIGN_MAP = {
 }
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _strip_version_footer(response: str) -> str:
+    marker = "\n\n---\n_MCP Server v"
+    if marker in response:
+        return response.split(marker, 1)[0]
+    return response
+
+
 # ============================================================================
 # Initialize MCP Server
 # ============================================================================
 
-SERVER_VERSION = "3.2.15"
+SERVER_VERSION = "3.3.0"
 
 mcp = FastMCP("figma_mcp")
 
@@ -285,6 +333,86 @@ class FigmaCodeGenInput(BaseModel):
         default=None,
         description="Component name (auto-generated from node name if not provided)"
     )
+
+
+class FigmaPipelineRunInput(BaseModel):
+    """Input model for deterministic pipeline runs."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, validate_assignment=True)
+
+    file_key: FigmaFileKey = Field(..., description="Figma file key")
+    node_id: FigmaNodeId = Field(..., description="Node ID to run through deterministic pipeline")
+    framework: CodeFramework = Field(
+        default=CodeFramework.REACT_TAILWIND,
+        description="Framework for deterministic generation (react/react_tailwind in v1)"
+    )
+    mode: PipelineMode = Field(
+        default=PipelineMode.STRICT_PIXEL,
+        description="Pipeline mode: strict_pixel or strict_pixel_plus_responsive"
+    )
+    use_cache: bool = Field(
+        default=True,
+        description="Use stage-level cache for warm runs"
+    )
+    target_match: float = Field(
+        default=PIPELINE_V2_DEFAULT_TARGET_MATCH,
+        ge=0.0,
+        le=1.0,
+        description="Target visual match ratio from 0.0 to 1.0"
+    )
+    max_visual_iterations: int = Field(
+        default=PIPELINE_V2_DEFAULT_MAX_VISUAL_ITER,
+        ge=1,
+        le=5,
+        description="Maximum visual validation iterations"
+    )
+    output_dir: Optional[str] = Field(
+        default=None,
+        description="Optional output directory for run artifacts"
+    )
+    run_label: Optional[str] = Field(
+        default=None,
+        description="Optional stable label for component naming"
+    )
+    implementation_screenshot_path: Optional[str] = Field(
+        default=None,
+        description="Optional implementation screenshot path for visual gate pixel diff"
+    )
+    auto_render_implementation: bool = Field(
+        default=PIPELINE_V2_DEFAULT_AUTO_RENDER,
+        description="Auto-render generated implementation screenshot when no path is provided"
+    )
+    figma_screenshot_scale: float = Field(
+        default=2.0,
+        ge=0.01,
+        le=4.0,
+        description="Scale for Figma reference screenshot capture"
+    )
+
+    @field_validator('framework')
+    @classmethod
+    def _validate_framework_scope(cls, v: CodeFramework) -> CodeFramework:
+        if v not in {CodeFramework.REACT, CodeFramework.REACT_TAILWIND}:
+            raise ValueError("Deterministic pipeline v1 supports only react/react_tailwind")
+        return v
+
+
+class FigmaPipelineRunResult(BaseModel):
+    """Output model for deterministic pipeline runs."""
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    run_id: str
+    status: str
+    stage_timings: Dict[str, float] = Field(default_factory=dict)
+    quality_metrics: Dict[str, Any] = Field(default_factory=dict)
+    artifacts: Dict[str, str] = Field(default_factory=dict)
+    fallback_count: int = 0
+    errors: List[str] = Field(default_factory=list)
+    gates: List[Dict[str, Any]] = Field(default_factory=list)
+    cache_hits: List[str] = Field(default_factory=list)
+    cache_misses: List[str] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class FigmaStylesInput(BaseModel):
@@ -525,7 +653,23 @@ async def _make_figma_request(
                 await asyncio.sleep(delay)
                 continue
             raise
-        except httpx.HTTPStatusError:
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+
+            if status in RETRYABLE_STATUS_CODES and attempt < MAX_RETRIES - 1:
+                retry_after_header = e.response.headers.get("Retry-After")
+                backoff_delay = RETRY_BASE_DELAY * (2 ** attempt)
+
+                retry_after_delay: Optional[float] = None
+                if retry_after_header:
+                    try:
+                        retry_after_delay = float(retry_after_header)
+                    except ValueError:
+                        retry_after_delay = None
+
+                await asyncio.sleep(max(retry_after_delay or 0, backoff_delay))
+                continue
+
             raise
 
     raise last_exception
@@ -1157,6 +1301,32 @@ async def _resolve_image_urls(file_key: str, image_refs: List[str]) -> Dict[str,
         return {}
 
 
+def _collect_image_refs_from_tree(node: Dict[str, Any], refs: set[str]) -> None:
+    """Collect imageRef values from a node tree."""
+    for fill in node.get('fills', []):
+        if fill.get('type') == 'IMAGE' and fill.get('visible', True):
+            image_ref = fill.get('imageRef')
+            if image_ref:
+                refs.add(image_ref)
+
+    for child in node.get('children', []):
+        _collect_image_refs_from_tree(child, refs)
+
+
+def _attach_image_urls_to_tree(node: Dict[str, Any], image_urls: Dict[str, str]) -> None:
+    """Attach resolved image URLs to IMAGE fills in a node tree."""
+    for fill in node.get('fills', []):
+        if fill.get('type') == 'IMAGE' and fill.get('visible', True):
+            image_ref = fill.get('imageRef')
+            if image_ref:
+                image_url = image_urls.get(image_ref)
+                if image_url:
+                    fill['imageUrl'] = image_url
+
+    for child in node.get('children', []):
+        _attach_image_urls_to_tree(child, image_urls)
+
+
 def _generate_svg_from_paths(vector_paths: Dict[str, Any], node: Dict[str, Any]) -> Optional[str]:
     """Generate SVG markup from vector path geometry.
 
@@ -1277,9 +1447,11 @@ def _is_icon_frame(node: Dict[str, Any]) -> bool:
                 break
 
     # Icon detection logic:
-    # - If has icon library naming pattern → likely icon
-    # - If icon-sized frame with vector children → likely icon
-    return has_icon_pattern or (is_icon_size and has_vector_children)
+    # - Name pattern alone is not enough (avoids false positives on large frames)
+    # - Prefer icon-sized nodes and/or confirmed vector internals
+    if has_icon_pattern and (is_icon_size or has_vector_children):
+        return True
+    return is_icon_size and has_vector_children
 
 
 def _is_chart_or_illustration(node: Dict[str, Any]) -> bool:
@@ -3849,7 +4021,7 @@ async def figma_get_design_tokens(params: FigmaDesignTokensInput) -> str:
         if params.node_id:
             data = await _make_figma_request(
                 f"files/{params.file_key}/nodes",
-                params={"ids": params.node_id}
+                params={"ids": params.node_id, "geometry": "paths"}
             )
             nodes = data.get('nodes', {})
             node = nodes.get(params.node_id, {}).get('document', {})
@@ -3935,7 +4107,7 @@ async def figma_get_design_tokens(params: FigmaDesignTokensInput) -> str:
             formatted_tokens['generated'] = {
                 'css_variables': _generate_css_variables(colors_list, typography_list, spacing_list, shadows_list),
                 'scss_variables': _generate_scss_variables(colors_list, typography_list, spacing_list, shadows_list),
-                'tailwind_config': _generate_tailwind_config(colors_list, typography_list, shadows_list)
+                'tailwind_config': _generate_tailwind_config(colors_list, typography_list, spacing_list)
             }
 
         result = json.dumps(formatted_tokens, indent=2)
@@ -4263,7 +4435,7 @@ async def figma_generate_code(params: FigmaCodeGenInput) -> str:
         if params.node_id:
             data = await _make_figma_request(
                 f"files/{params.file_key}/nodes",
-                params={"ids": params.node_id}
+                params={"ids": params.node_id, "geometry": "paths"}
             )
             nodes = data.get('nodes', {})
             node = nodes.get(params.node_id, {}).get('document', {})
@@ -4273,6 +4445,14 @@ async def figma_generate_code(params: FigmaCodeGenInput) -> str:
 
         if not node:
             return f"Error: Node '{params.node_id}' not found."
+
+        # Resolve imageRef fills into downloadable URLs when available.
+        image_refs: set[str] = set()
+        _collect_image_refs_from_tree(node, image_refs)
+        if image_refs:
+            image_urls = await _resolve_image_urls(params.file_key, list(image_refs))
+            if image_urls:
+                _attach_image_urls_to_tree(node, image_urls)
 
         # Generate component name
         component_name = params.component_name or _sanitize_component_name(node.get('name', 'Component'))
@@ -4334,6 +4514,248 @@ async def figma_generate_code(params: FigmaCodeGenInput) -> str:
 
         return "\n".join(lines)
 
+    except Exception as e:
+        return _handle_api_error(e)
+
+
+# ============================================================================
+# Deterministic Pipeline Tool
+# ============================================================================
+
+@_versioned_tool(
+    name="figma_run_pipeline",
+    annotations={
+        "title": "Run Deterministic Figma Pipeline",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True
+    }
+)
+async def figma_run_pipeline(params: FigmaPipelineRunInput) -> str:
+    """Run deterministic, cache-enabled pipeline for React/Tailwind output."""
+    try:
+        pipeline_enabled = _env_bool("FIGMA_PIPELINE_V2_ENABLED", PIPELINE_V2_DEFAULT_ENABLED)
+        pipeline_scope = os.getenv("FIGMA_PIPELINE_V2_SCOPE", PIPELINE_V2_DEFAULT_SCOPE).strip().lower()
+        visual_mode = os.getenv("FIGMA_PIPELINE_VISUAL_MODE", PIPELINE_V2_DEFAULT_VISUAL_MODE)
+        cache_enabled = _env_bool("FIGMA_PIPELINE_CACHE_ENABLED", PIPELINE_V2_DEFAULT_CACHE_ENABLED)
+        strict_pixel_default = _env_bool("FIGMA_PIPELINE_STRICT_PIXEL_DEFAULT", PIPELINE_V2_DEFAULT_STRICT_PIXEL)
+        auto_render_default = _env_bool("FIGMA_PIPELINE_AUTO_RENDER_ENABLED", PIPELINE_V2_DEFAULT_AUTO_RENDER)
+        env_target_match = _env_float("FIGMA_PIPELINE_TARGET_MATCH", PIPELINE_V2_DEFAULT_TARGET_MATCH)
+        env_max_visual_iter = _env_int("FIGMA_PIPELINE_MAX_VISUAL_ITER", PIPELINE_V2_DEFAULT_MAX_VISUAL_ITER)
+        pass_threshold = _env_float("FIGMA_PIPELINE_PASS_THRESHOLD", PIPELINE_V2_DEFAULT_PASS_THRESHOLD)
+        warn_threshold = _env_float("FIGMA_PIPELINE_WARN_THRESHOLD", PIPELINE_V2_DEFAULT_WARN_THRESHOLD)
+        pass_threshold = max(0.0, min(pass_threshold, 100.0))
+        warn_threshold = max(0.0, min(warn_threshold, pass_threshold))
+
+        target_match = params.target_match
+        if params.target_match == PIPELINE_V2_DEFAULT_TARGET_MATCH:
+            target_match = env_target_match
+
+        max_visual_iterations = params.max_visual_iterations
+        if params.max_visual_iterations == PIPELINE_V2_DEFAULT_MAX_VISUAL_ITER:
+            max_visual_iterations = max(1, min(env_max_visual_iter, 5))
+
+        auto_render_implementation = params.auto_render_implementation
+        if params.auto_render_implementation == PIPELINE_V2_DEFAULT_AUTO_RENDER:
+            auto_render_implementation = auto_render_default
+
+        mode = params.mode
+        if params.mode == PipelineMode.STRICT_PIXEL and not strict_pixel_default:
+            mode = PipelineMode.STRICT_PIXEL_PLUS_RESPONSIVE
+
+        if pipeline_scope not in {"react", "all"}:
+            pipeline_scope = PIPELINE_V2_DEFAULT_SCOPE
+
+        if pipeline_scope == "react" and params.framework not in {CodeFramework.REACT, CodeFramework.REACT_TAILWIND}:
+            return "Error: Current deterministic pipeline scope supports only React frameworks."
+
+        if target_match > 0:
+            pass_threshold = max(pass_threshold, target_match * 100.0)
+            warn_threshold = min(warn_threshold, pass_threshold)
+
+        async def _fetch_snapshot(file_key: str, node_id: str) -> Dict[str, Any]:
+            return await _make_figma_request(
+                f"files/{file_key}/nodes",
+                params={"ids": node_id, "geometry": "paths"}
+            )
+
+        async def _extract_tokens_for_pipeline(
+            _file_key: str,
+            _node_id: str,
+            root_node: Dict[str, Any]
+        ) -> Dict[str, Any]:
+            colors: List[Dict[str, Any]] = []
+            typography: List[Dict[str, Any]] = []
+            spacing: List[Dict[str, Any]] = []
+            effects: List[Dict[str, Any]] = []
+
+            _extract_colors_from_node(root_node, colors)
+            _extract_typography_from_node(root_node, typography)
+            _extract_spacing_from_node(root_node, spacing)
+            _extract_shadows_from_node(root_node, effects)
+
+            unique_colors: Dict[str, Dict[str, Any]] = {}
+            for c in colors:
+                if c.get('hex'):
+                    key = c['hex']
+                elif c.get('color'):
+                    key = c['color']
+                elif c.get('gradient'):
+                    key = str(c['gradient'])
+                elif c.get('image'):
+                    key = c['image'].get('imageRef', str(c['image']))
+                else:
+                    key = str(c)
+                if key not in unique_colors:
+                    unique_colors[key] = c
+
+            shadow_tokens = [s for s in effects if 'SHADOW' in s.get('type', '')]
+            blur_tokens = [s for s in effects if 'BLUR' in s.get('type', '')]
+
+            unique_shadows: Dict[str, Dict[str, Any]] = {}
+            for s in shadow_tokens:
+                key = f"{s.get('color', '')}-{s.get('offsetX', 0)}-{s.get('offsetY', 0)}-{s.get('blur', 0)}"
+                if key not in unique_shadows:
+                    unique_shadows[key] = s
+
+            unique_blurs: Dict[str, Dict[str, Any]] = {}
+            for b in blur_tokens:
+                key = f"{b.get('type', '')}-{b.get('radius', 0)}"
+                if key not in unique_blurs:
+                    unique_blurs[key] = b
+
+            return {
+                "colors": list(unique_colors.values()),
+                "typography": typography,
+                "spacing": [s for s in spacing if s.get('type') == 'auto-layout'],
+                "shadows": list(unique_shadows.values()),
+                "blurs": list(unique_blurs.values()),
+            }
+
+        async def _get_figma_screenshot_path(file_key: str, node_id: str, scale: float) -> Optional[str]:
+            response = await figma_get_screenshot(
+                FigmaScreenshotInput(
+                    file_key=file_key,
+                    node_ids=[node_id],
+                    format=ImageFormat.PNG,
+                    scale=scale
+                )
+            )
+            content = _strip_version_footer(response)
+            match = re.search(r"`(/[^`]+\.(?:png|jpg|jpeg|svg|pdf))`", content)
+            if match:
+                return match.group(1)
+            return None
+
+        async def _render_implementation_screenshot(
+            generated_code: str,
+            component_name: str,
+            asset_manifest: List[Dict[str, Any]],
+            viewport_width: int,
+            viewport_height: int,
+            output_path: str,
+            use_tailwind: bool,
+        ) -> Dict[str, Any]:
+            return await render_react_implementation_screenshot(
+                generated_code=generated_code,
+                component_name=component_name,
+                asset_manifest=asset_manifest,
+                viewport_width=viewport_width,
+                viewport_height=viewport_height,
+                output_path=output_path,
+                use_tailwind=use_tailwind,
+            )
+
+        request = PipelineRunRequest(
+            file_key=params.file_key,
+            node_id=params.node_id,
+            framework=params.framework.value,
+            mode=mode,
+            target_match=target_match,
+            use_cache=params.use_cache,
+            max_visual_iterations=max_visual_iterations,
+            output_dir=params.output_dir,
+            run_label=params.run_label,
+            visual_mode=visual_mode,
+            figma_screenshot_scale=params.figma_screenshot_scale,
+            implementation_screenshot_path=params.implementation_screenshot_path,
+            auto_render_implementation=auto_render_implementation,
+        )
+
+        config = PipelineConfig(
+            pipeline_version=SERVER_VERSION,
+            cache_root=Path(".qa/cache"),
+            output_root=Path(params.output_dir or ".qa/runs"),
+            cache_enabled=cache_enabled,
+            pass_threshold=pass_threshold,
+            warn_threshold=warn_threshold,
+            visual_mode=visual_mode,
+        )
+
+        deps = PipelineDependencies(
+            fetch_snapshot=_fetch_snapshot,
+            extract_tokens=_extract_tokens_for_pipeline,
+            resolve_image_urls=_resolve_image_urls,
+            generate_react_code=_generate_react_code,
+            sanitize_component_name=_sanitize_component_name,
+            get_figma_screenshot=_get_figma_screenshot_path,
+            render_implementation_screenshot=_render_implementation_screenshot,
+        )
+
+        runner = PipelineRunner(deps=deps, config=config)
+        result: PipelineRunResult = await runner.run(request)
+
+        public_result = FigmaPipelineRunResult(
+            run_id=result.run_id,
+            status=result.status.value,
+            stage_timings=result.stage_timings,
+            quality_metrics=result.quality_metrics,
+            artifacts=result.artifacts,
+            fallback_count=result.fallback_count,
+            errors=result.errors,
+            gates=[g.model_dump() for g in result.gates],
+            cache_hits=result.cache_hits,
+            cache_misses=result.cache_misses,
+            metadata={
+                **result.metadata,
+                "shadow_mode": not pipeline_enabled,
+                "v2_enabled": pipeline_enabled,
+                "v2_scope": pipeline_scope,
+            },
+        )
+
+        lines = [
+            "# Deterministic Pipeline Run",
+            f"**Run ID:** `{public_result.run_id}`",
+            f"**Status:** {public_result.status}",
+            f"**Framework:** {params.framework.value}",
+            f"**Mode:** {mode.value}",
+            f"**Shadow Mode:** {'Yes' if not pipeline_enabled else 'No'}",
+            "",
+            "## Stage Timings",
+        ]
+
+        for stage, seconds in public_result.stage_timings.items():
+            lines.append(f"- `{stage}`: {seconds:.3f}s")
+
+        lines.extend(["", "## Artifacts"])
+        for key, value in public_result.artifacts.items():
+            lines.append(f"- `{key}`: `{value}`")
+
+        if public_result.errors:
+            lines.extend(["", "## Errors"])
+            for err in public_result.errors:
+                lines.append(f"- {err}")
+
+        lines.extend([
+            "",
+            "## JSON Result",
+            "```json",
+            json.dumps(public_result.model_dump(), indent=2),
+            "```",
+        ])
+        return "\n".join(lines)
     except Exception as e:
         return _handle_api_error(e)
 

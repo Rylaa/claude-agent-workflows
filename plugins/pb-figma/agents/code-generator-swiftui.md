@@ -62,7 +62,7 @@ Use `TodoWrite` to track code generation progress through these steps:
 3. **Build Asset Node Map** - Extract Asset Children from all components
 4. **Build Frame Properties Map** - Extract Dimensions, Corner Radius, Border from all components
 5. **Detect Xcode/SwiftUI Framework** - Identify Xcode project or SPM package
-6. **Confirm Framework with User** - Validate detection with user
+6. **Confirm Framework with User (If Ambiguous)** - Ask only when multiple platform targets conflict
 7. **Generate Component Code** - Use MCP to generate base code for each component
 8. **Enhance with SwiftUI Specifics** - Add property wrappers, modifiers, accessibility
 9. **Write Component Files** - Save to SwiftUI project structure
@@ -148,10 +148,15 @@ Determine project type:
 grep -E "TARGETED_DEVICE_FAMILY|\.iOS\(|\.macOS\(" *.xcodeproj/project.pbxproj Package.swift 2>/dev/null
 ```
 
-### Confirm with User
+### Confirm with User (Only if Ambiguous)
 
-Use `AskUserQuestion`:
+If detection confidence is high (single clear Xcode/SPM target), proceed without user prompt.
 
+Use `AskUserQuestion` only when:
+- Multiple platform targets are detected with equal confidence
+- Project structure is mixed and target cannot be inferred safely
+
+Prompt template:
 ```
 Detected: {Xcode Project/SPM Package} for {iOS/macOS/both}
 

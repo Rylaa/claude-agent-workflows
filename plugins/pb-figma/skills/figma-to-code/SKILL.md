@@ -41,8 +41,10 @@ Figma URL
     |                         |
     v                         v
 +-------------------+  +-------------------+
-| 3a. asset-manager |  | 3b. font-manager  |  (background)
-+-------------------+  +-------------------+
+| 3a. asset-manager |  | 3b. font-manager  |  (background, haiku)
+| (haiku/opus*)     |  +-------------------+
++-------------------+
+* haiku if no flagged frames, opus if flagged frames exist
     |
     v
 +---------------------------------------------+
@@ -57,9 +59,14 @@ Figma URL
 +---------------------------------------------+
     |
     v
-+-------------------------+
-| 5. compliance-checker   | -> Final Report
-+-------------------------+
++-------------------------------+
+| 5a. compliance-pre-check      | -> Static + A11y (haiku)
++-------------------------------+
+    | (if PASS/WARN)
+    v
++-------------------------------+
+| 5b. compliance-checker        | -> Gate 2+3 + Final Report (opus)
++-------------------------------+
 ```
 
 ## Invocation Sequence
@@ -74,9 +81,26 @@ Task(subagent_type="pb-figma:design-analyst",
      prompt="Create Implementation Spec from: docs/figma-reports/{file_key}-validation.md")
 
 # Step 3: Asset Manager + Font Manager (PARALLEL)
-# Launch BOTH in a single message with multiple Task calls:
+# Launch BOTH in a single message with multiple Task calls.
+#
+# ASSET MANAGER MODEL SELECTION:
+# Before invoking, read the spec and check for "Flagged for LLM Review" section.
+# - If NO flagged frames (section absent or empty) → use model="haiku" (all tasks are mechanical)
+# - If flagged frames exist → do NOT set model (defaults to opus for LLM Vision analysis)
+#
+# Check: Grep("## Flagged for LLM Review", path="docs/figma-reports/{file_key}-spec.md")
+
+# Option A: No flagged frames (common case ~80% of designs)
 Task(subagent_type="pb-figma:asset-manager",
+     model="haiku",
      prompt="Download assets from spec: docs/figma-reports/{file_key}-spec.md")
+
+# Option B: Flagged frames exist (complex designs with ambiguous elements)
+Task(subagent_type="pb-figma:asset-manager",
+     model="opus",
+     prompt="Download assets from spec: docs/figma-reports/{file_key}-spec.md")
+
+# Font Manager always runs on haiku (100% mechanical, defined in agent header)
 Task(subagent_type="pb-figma:font-manager",
      prompt="Detect and setup fonts from spec: docs/figma-reports/{file_key}-spec.md",
      run_in_background=True)
@@ -128,9 +152,22 @@ for batch in dependency_aware_batches:
 # > **Important:** Each batch reads the FULL spec for shared context (tokens, assets).
 # > Only component generation is scoped to the batch.
 
-# Step 5: Compliance Checker
+# Step 5a: Compliance Pre-Check (runs on haiku - mechanical checks only)
+# Static checks (structure, tokens, assets) + Gate 1 (Accessibility)
+# All checks are threshold-based, regex-based, or formula-based → zero quality loss on haiku
+Task(subagent_type="pb-figma:compliance-pre-check",
+     prompt="Run static compliance checks and accessibility gate on: docs/figma-reports/{file_key}-spec.md")
+
+# Step 5b: Full Compliance Checker (runs on opus - visual validation)
+# Only invoke if pre-check passed (PRE_CHECK_PASS or PRE_CHECK_WARN)
+# Check: Read(".qa/pre-check-results.json") → if status != "PRE_CHECK_FAIL"
+#
+# If PRE_CHECK_FAIL → pipeline stops here, no need for expensive visual validation
+# If PRE_CHECK_PASS/WARN → proceed to Gate 2 (Responsive) + Gate 3 (Visual)
 Task(subagent_type="pb-figma:compliance-checker",
-     prompt="Validate implementation against spec: docs/figma-reports/{file_key}-spec.md")
+     prompt="Validate implementation against spec: docs/figma-reports/{file_key}-spec.md. "
+            "NOTE: Static checks and Gate 1 already passed in pre-check (.qa/pre-check-results.json). "
+            "Focus on Gate 2 (Responsive) and Gate 3 (Visual Validation).")
 ```
 
 ## Framework Detection
@@ -179,8 +216,9 @@ if checkpoints:
 | 1 complete | `checkpoint-1-design-validator.json` | Phase 2: design-analyst |
 | 2 complete | `checkpoint-2-design-analyst.json` | Phase 3: asset-manager |
 | 3 complete | `checkpoint-3-asset-manager.json` | Phase 4: code-generator |
-| 4 complete | `checkpoint-4-code-generator-{framework}.json` | Phase 5: compliance-checker |
-| 5 complete | `checkpoint-5-compliance-checker.json` | Pipeline complete |
+| 4 complete | `checkpoint-4-code-generator-{framework}.json` | Phase 5a: compliance-pre-check |
+| 5a complete | `checkpoint-5a-compliance-pre-check.json` | Phase 5b: compliance-checker (if PASS/WARN) |
+| 5b complete | `checkpoint-5-compliance-checker.json` | Pipeline complete |
 
 **Clean start:** Delete `.qa/checkpoint-*.json` to force full pipeline re-run.
 

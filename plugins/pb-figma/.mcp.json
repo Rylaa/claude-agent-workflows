@@ -2,11 +2,23 @@
   "mcpServers": {
     "pixelbyte-figma-mcp": {
       "command": "uvx",
-      "args": ["--force-reinstall", "pixelbyte-figma-mcp>=3.2.15,<4.0.0"],
+      "args": ["pixelbyte-figma-mcp==3.3.0"],
       "env": {
         "FIGMA_PERSONAL_ACCESS_TOKEN": "${FIGMA_PERSONAL_ACCESS_TOKEN}",
         "FIGMA_ACCESS_TOKEN": "${FIGMA_PERSONAL_ACCESS_TOKEN}",
-        "FIGMA_TOKEN": "${FIGMA_PERSONAL_ACCESS_TOKEN}"
+        "FIGMA_TOKEN": "${FIGMA_PERSONAL_ACCESS_TOKEN}",
+        "FIGMA_CODEGEN_MAX_CHILDREN": "60",
+        "FIGMA_CODEGEN_MAX_NATIVE_CHILDREN": "40",
+        "FIGMA_PIPELINE_V2_ENABLED": "false",
+        "FIGMA_PIPELINE_V2_SCOPE": "react",
+        "FIGMA_PIPELINE_CACHE_ENABLED": "true",
+        "FIGMA_PIPELINE_VISUAL_MODE": "hybrid",
+        "FIGMA_PIPELINE_STRICT_PIXEL_DEFAULT": "true",
+        "FIGMA_PIPELINE_AUTO_RENDER_ENABLED": "true",
+        "FIGMA_PIPELINE_TARGET_MATCH": "0.95",
+        "FIGMA_PIPELINE_MAX_VISUAL_ITER": "3",
+        "FIGMA_PIPELINE_PASS_THRESHOLD": "95",
+        "FIGMA_PIPELINE_WARN_THRESHOLD": "85"
       }
     }
   }

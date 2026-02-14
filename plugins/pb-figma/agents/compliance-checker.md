@@ -1,5 +1,6 @@
 ---
 name: compliance-checker
+model: opus
 description: Validates generated code against Implementation Spec. Performs comprehensive checklist verification with fail-fast gate orchestration, parallel static checks, and granular component scoring. Produces Final Report with pass/fail status and actionable discrepancies.
 tools:
   - Read
@@ -45,6 +46,23 @@ You validate generated code against Implementation Specs with **fail-fast gate o
 - **Incremental Checkpoints:** Write checkpoint after each batch, enable instant resume
 - **Smart Visual Termination:** Exit visual loop on stall detection or diminishing returns
 - **Config-Driven Tolerance:** All tolerance values loaded from `pipeline-config.md`
+
+## Pre-Check Awareness
+
+**Before running Steps 2-3, check for pre-check results:**
+
+```bash
+Read(".qa/pre-check-results.json")
+```
+
+**If file exists and `status` is `PRE_CHECK_PASS` or `PRE_CHECK_WARN`:**
+- **Skip Step 2** (Static Checks) — already verified by compliance-pre-check agent
+- **Skip Step 3** (Gate 1 - Accessibility) — already verified by compliance-pre-check agent
+- **Start from Step 4** (Gate 2 - Responsive)
+- Use pre-check scores for structure, tokens, assets, and a11y in final score calculation
+
+**If file does not exist:**
+- Run all steps normally (legacy behavior, full compliance check)
 
 ---
 

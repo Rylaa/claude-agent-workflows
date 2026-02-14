@@ -1,6 +1,6 @@
 # Pipeline Configuration Reference
 
-> **Used by:** design-analyst, code-generator-*, compliance-checker
+> **Used by:** design-analyst, code-generator-*, compliance-pre-check, compliance-checker
 
 This document defines configurable values used across the pipeline. When the skill file or user specifies overrides, agents should use those values instead of defaults.
 
@@ -28,7 +28,7 @@ This document defines configurable values used across the pipeline. When the ski
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| batch_size | 10 | Assets per API call |
+| batch_size | 5 | Assets per API call |
 | retry_count | 3 | Max retries per failed operation |
 | retry_base_delay | 1s | Initial retry delay (exponential backoff) |
 | rate_limit_delay | 2s | Delay between MCP calls |
@@ -70,6 +70,21 @@ This document defines configurable values used across the pipeline. When the ski
 | max_visual_iterations | 3 | Maximum visual verification loop iterations |
 | visual_improvement_threshold | 10 | Minimum % improvement between iterations to continue |
 | stall_detection_enabled | true | Exit loop if improvement < threshold |
+
+### Deterministic Pipeline Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| FIGMA_PIPELINE_V2_ENABLED | false | Enables deterministic runner (shadow mode when false) |
+| FIGMA_PIPELINE_V2_SCOPE | react | Active framework scope for v2 |
+| FIGMA_PIPELINE_CACHE_ENABLED | true | Enables stage-level cache in `.qa/cache` |
+| FIGMA_PIPELINE_VISUAL_MODE | hybrid | Visual gate mode (`hybrid`, `pixel`, `vision`) |
+| FIGMA_PIPELINE_STRICT_PIXEL_DEFAULT | true | Default mode selection when caller omits explicit mode |
+| FIGMA_PIPELINE_AUTO_RENDER_ENABLED | true | Auto-render implementation screenshot for visual gate |
+| FIGMA_PIPELINE_TARGET_MATCH | 0.95 | Target visual match ratio |
+| FIGMA_PIPELINE_MAX_VISUAL_ITER | 3 | Max visual gate iterations |
+| FIGMA_PIPELINE_PASS_THRESHOLD | 95 | PASS threshold score for static/visual gates |
+| FIGMA_PIPELINE_WARN_THRESHOLD | 85 | WARN threshold score for static/visual gates |
 
 ### Component Scoring
 

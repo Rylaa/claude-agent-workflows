@@ -11,14 +11,27 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional, Tuple
 import math
 import re
+import os
 
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-MAX_CHILDREN_LIMIT = 20       # React/Vue/CSS child limit per container
-MAX_NATIVE_CHILDREN_LIMIT = 15  # SwiftUI/Kotlin child limit
+def _get_int_env(name: str, default: int) -> int:
+    """Read a positive integer environment variable with safe fallback."""
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+MAX_CHILDREN_LIMIT = _get_int_env("FIGMA_CODEGEN_MAX_CHILDREN", 20)       # React/Vue/CSS child limit per container
+MAX_NATIVE_CHILDREN_LIMIT = _get_int_env("FIGMA_CODEGEN_MAX_NATIVE_CHILDREN", 15)  # SwiftUI/Kotlin child limit
 MAX_DEPTH = 12                  # Max recursive depth
 
 # Common Figma icon name patterns → SF Symbols mapping
@@ -862,15 +875,21 @@ def _get_single_fill_css(fill: Dict[str, Any]) -> Optional[str]:
             return gradient_css
     elif fill_type == 'IMAGE':
         image_ref = fill.get('imageRef', '')
+        image_url = fill.get('imageUrl')
         scale_mode = fill.get('scaleMode', 'FILL')
+        url_value = image_url if image_url else f"/* imageRef: {image_ref} */"
+        # Avoid breaking CSS string quoting when URL contains apostrophes.
+        safe_url_value = str(url_value).replace("'", "%27")
         if scale_mode == 'FILL':
-            return f"url(/* imageRef: {image_ref} */) center/cover no-repeat"
+            return f'url("{safe_url_value}") center/cover no-repeat'
         elif scale_mode == 'FIT':
-            return f"url(/* imageRef: {image_ref} */) center/contain no-repeat"
+            return f'url("{safe_url_value}") center/contain no-repeat'
+        elif scale_mode == 'STRETCH':
+            return f'url("{safe_url_value}") center/100% 100% no-repeat'
         elif scale_mode == 'TILE':
-            return f"url(/* imageRef: {image_ref} */) repeat"
+            return f'url("{safe_url_value}") repeat'
         else:
-            return f"url(/* imageRef: {image_ref} */)"
+            return f'url("{safe_url_value}")'
     return None
 
 
